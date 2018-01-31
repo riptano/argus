@@ -1,0 +1,117 @@
+import os
+from configparser import RawConfigParser
+
+from typing import TYPE_CHECKING
+
+from src.jenkins_job import JenkinsJob
+from src.utils import (clear, get_build_options, jenkins_reports_dir,
+                       save_argus_config)
+
+if TYPE_CHECKING:
+    from typing import List
+
+
+class JenkinsReport:
+
+    def __init__(self, report_name):
+        self.name = report_name
+        self.connection_dict = {}  # dict of {connection_name: job_name_list}
+        self._parser_path = jenkins_reports_dir + '/{}.cfg'.format(self.name)
+
+    @property
+    def connection_names(self):
+        return list(self.connection_dict.keys())
+
+    @property
+    def job_names(self):
+        return [job_name for job_list in list(self.connection_dict.values()) for job_name in job_list]
+
+    @property
+    def job_dict(self):
+        """dict of {job: connection_name}"""
+        job_dict = {}
+        for connection_name, job_name_list in self.connection_dict.items():
+            for job_name in job_name_list:
+                job_dict.update({job_name: connection_name})
+        return job_dict
+
+    def __str__(self):
+        return '{}'.format(self.name)
+
+    def __repr__(self):
+        return 'JenkinsReport({})'.format(self.name)
+
+    def save_report_config(self):
+        config_parser = RawConfigParser()
+        config_parser.add_section(SECTION_TITLE)
+
+        if self.connection_names:
+            config_parser.set(SECTION_TITLE, 'connection_names', ','.join(self.connection_names))
+            for connection_name in self.connection_names:
+                config_parser.add_section(connection_name)
+                config_parser.set(connection_name, 'job_names', ','.join(self.connection_dict[connection_name]))
+
+        save_argus_config(config_parser, self._parser_path)
+
+    @staticmethod
+    def load_report_config(jenkins_manager, report_name):
+        jenkins_report = JenkinsReport(report_name)
+        config_parser = RawConfigParser()
+        if os.path.isfile(jenkins_report._parser_path):
+            config_parser.read(jenkins_report._parser_path)
+
+            if config_parser.has_option(SECTION_TITLE, 'connection_names'):
+                connection_names = config_parser.get(SECTION_TITLE, 'connection_names').split(',')
+                for connection_name in connection_names:
+                    job_names = config_parser.get(connection_name, 'job_names').split(',')
+                    jenkins_report.connection_dict[connection_name] = job_names
+
+            jenkins_manager.jenkins_reports[jenkins_report.name] = jenkins_report
+        else:
+            print('No config file for {}.'.format(report_name))
+
+    def add_job_to_report(self, job_name, connection_name):
+        if connection_name in self.connection_names:
+            self.connection_dict[connection_name].append(job_name)
+        else:
+            self.connection_dict[connection_name] = [job_name]
+
+    def remove_job_from_report(self, job_name, connection_name):
+        # type: (str, str) -> None
+        """
+        Remove a job from a report.
+
+        :param job_name: The name of the job to be removed
+        :param connection_name: The name of the connection that the job belongs to
+        :return: None
+        """
+        self.connection_dict[connection_name].remove(job_name)
+
+    def get_job_list(self, jenkins_manager):
+        job_list = []
+        for job_name, connection_name in self.job_dict.items():
+            connection = jenkins_manager.get_connection(connection_name)
+            job = connection.jenkins_jobs[job_name]
+            job_list.append(job)
+        return job_list
+
+    def print_report(self, job_list):
+        # type: (List[JenkinsJob]) -> None
+        clear()
+        format_str = '{:<5}{:<60}{:<30}{:<25}{:<25}{:<15}{:<30}{:<25}'
+        separator = ('-' * len(format_str.format('', '', '', '', '', '', '', '')))
+        builds_to_check, recent_builds_to_check = get_build_options()
+
+        print(separator)
+        print(format_str.format('#', 'Job Name', 'Connection', 'Test Result', 'Last Build Date', 'Job Health',
+                                'Failed Build History ({})'.format(builds_to_check),
+                                'Recent Failed Builds ({})'.format(recent_builds_to_check)))
+        print(separator)
+        for i, job in enumerate(job_list, start=1):
+            print(format_str.format(i, job.name, self.job_dict[job.name], job.last_build_tests,
+                                    job.last_build_date, job.health, job.build_history,
+                                    job.recent_history))
+        print(separator)
+
+
+SECTION_TITLE = JenkinsReport.__name__
