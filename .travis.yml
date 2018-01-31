@@ -1,0 +1,13 @@
+language: python
+python:
+ - "3.6"
+cache: pip
+install:
+ - pip install -r requirements.txt
+ - pip install pycodestyle flake8 pylint
+script:
+ - flake8 --ignore E501,E702,F401,F811,F812,F822,F823,F831,F841,N8,C9
+ - pycodestyle --ignore=E501 src/
+ - pylint --disable=all --enable=E,F src/
+ - nosetests tests/unit
+sudo: false
