@@ -1,3 +1,17 @@
+# Copyright 2018 DataStax, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import configparser
 import optparse
 import os
@@ -29,8 +43,9 @@ class MainMenu:
         parser.add_option('-n', '--jenkins_project_name', help='Name of consistent root of project names in Jenkins')
         parser.add_option('-b', '--jenkins_branch', help='(TODO) Used with -j, specify branch to run reports against')
         parser.add_option('-t', '--jenkins_type', help='(TODO) Used with -j, specify type of test [u]nit test, or [d]test to report against')
-        parser.add_option('-c', '--triage_csv', help='Specifies local file containing [link, key, summary, assignee, reviewer, status, prio, repro, scope, component] triage file to update against live JIRA data')
-        parser.add_option('-o', '--triage_out', help='Output file name for updated triage data. If not provided, prints to stdout.')
+        # TODO: Make this available once triage_update is brought up to speed now that we cache JiraIssues offline
+        # parser.add_option('-c', '--triage_csv', help='Specifies local file containing [link, key, summary, assignee, reviewer, status, prio, repro, scope, component] triage file to update against live JIRA data')
+        # parser.add_option('-o', '--triage_out', help='Output file name for updated triage data. If not provided, prints to stdout.')
         parser.add_option('-u', '--unit_test', help='Unit testing mode, does not connect servers, saves config changes to test/ folder', action='store_true', dest='unit_test')
         parser.add_option('-v', '--verbose', help='Log verbose debug output to console and argus.log', action='store_true', dest='verbose')
 

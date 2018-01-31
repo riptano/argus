@@ -1,7 +1,7 @@
 # Argus - why?
 Argus provides some key functionality over the existing JIRA web browser or free JIRA clients:
 
-1. Querying 2 different JIRA connections and displaying the results together (open-source + proprietary in single dashboard, for example)
+1. Querying multiple JIRA connections and displaying the results together (single eng, multiple OSS projects for example)
 2. Displaying dependency chains of tickets in a single dashboard without having to follow links via a browser.
 3. More compact visualization of results in a terminal rather than relying on a browser.
 4. Caching jira results locally and only pulling a diff of updated on query.
@@ -31,7 +31,7 @@ Argus provides some key functionality over the existing JIRA web browser or free
 Note: Argus uses a local, application-specific password to encode the user and password information for JIRA connections. <!-- end_user_guide -->
 
 ## What's left to do?
-* Reference github issue tracking: [LINK PENDING OPEN-SOURCING]
+* Reference github issue tracking: https://github.com/riptano/argus/issues
 
 ## Argus Contributor Getting Started
 * JiraConnection: A network / account connection to a Jira instance
@@ -44,7 +44,7 @@ Note: Argus uses a local, application-specific password to encode the user and p
 * utils.py: General menu and config utilities
 * jira_utils.py: Querying logic
 * MainMenu: As advertised.
-* DisplayFilter: (Largely ToDo) Used to select columns for display, filter based on inclusion criteria (string matching) on results already pulled from JIRA, and (ToDo) change sorting order of results
+* DisplayFilter: (Largely TODO) Used to select columns for display, filter based on inclusion criteria (string matching) on results already pulled from JIRA, and (ToDo) change sorting order of results
 * TeamManager: Contains logic to run team-based reports
 * Filtering: there are 2 major ways in which things can be filtered:
   - ReportFilter.filter_items has the most flexibility as it's python logic
