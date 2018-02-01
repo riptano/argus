@@ -197,6 +197,8 @@ class MainMenu:
             MenuOption('r', 'Reports Manager', self.go_to_jenkins_reports_manager_menu, pause=False),
             MenuOption('c', 'Connections Manager', self.go_to_jenkins_connections_manager_menu, pause=False),
             MenuOption.print_blank_line(),
+            MenuOption('d', 'Default Reports', self.go_to_default_reports_menu, pause=False),
+            MenuOption.print_blank_line(),
             MenuOption.return_to_previous_menu(self.go_to_main_menu)
         ]
 
@@ -235,6 +237,13 @@ class MainMenu:
             MenuOption('r', 'Remove a view', self._jenkins_manager.remove_view, pause=False),
             MenuOption.print_blank_line(),
             MenuOption.return_to_previous_menu(self.go_to_jenkins_connections_manager_menu)
+        ]
+
+        self.default_reports_menu = [
+            MenuOption('u', 'Unit Tests report', self._jenkins_manager.testall_report),
+            MenuOption('d', 'Distributed Tests report', self._jenkins_manager.dtest_report),
+            MenuOption.print_blank_line(),
+            MenuOption.return_to_previous_menu(self.go_to_jenkins_menu)
         ]
 
         self.options_menu = [
@@ -313,6 +322,10 @@ class MainMenu:
     def go_to_jenkins_connection_menu(self):
         self.active_menu = self.jenkins_connection_menu
         self.menu_header = 'Jenkins Connection Menu [{}]'.format(self._jenkins_manager.active_connection)
+
+    def go_to_default_reports_menu(self):
+        self.active_menu = self.default_reports_menu
+        self.menu_header = 'Default Jenkins Reports'
 
     def go_to_options_menu(self):
         self.active_menu = self.options_menu
