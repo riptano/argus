@@ -20,14 +20,14 @@ from typing import TYPE_CHECKING, Optional
 
 from requests.exceptions import ConnectionError, HTTPError, MissingSchema
 
+import config
 from src.jenkins_connection import JenkinsConnection
 from src.jenkins_default_reports import generate_branch_report
 from src.jenkins_job import JenkinsJob
 from src.jenkins_report import JenkinsReport
-from src.utils import (Config, ConfigError, display_results,
-                       get_connection_name, get_input, is_yes,
-                       jenkins_conf_file, jenkins_data_dir, jenkins_views_dir,
-                       pause, pick_value, save_argus_config)
+from src.utils import (ConfigError, display_results, get_connection_name,
+                       get_input, is_yes, jenkins_conf_file, jenkins_data_dir,
+                       jenkins_views_dir, pause, pick_value, save_argus_config)
 
 if TYPE_CHECKING:
     from typing import Dict, List
@@ -40,7 +40,7 @@ class JenkinsManager:
     """
 
     def __init__(self, main_menu):
-        self._jenkins_branches = Config.JENKINS_BRANCHES
+        self._jenkins_branches = config.JENKINS_BRANCHES
         self._builds_to_check = 50
         self._max_results = 20
         self._main_menu = main_menu

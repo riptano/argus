@@ -21,11 +21,12 @@ from multiprocessing import Pool
 from os.path import exists
 from urllib.request import urlopen
 
-from src.utils import clear, Config, load_file, open_url_in_browser, pause, pick_value
+import config
+from src.utils import clear, load_file, open_url_in_browser, pause, pick_value
 
-JENKINS_URL = Config.JENKINS_URL
-JENKINS_BRANCHES = Config.JENKINS_BRANCHES
-JENKINS_PROJECT = Config.JENKINS_PROJECT
+JENKINS_URL = config.JENKINS_URL
+JENKINS_BRANCHES = config.JENKINS_BRANCHES
+JENKINS_PROJECT = config.JENKINS_PROJECT
 
 BUILDS_TO_CHECK = 50
 MAX_RESULTS = 20

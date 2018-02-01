@@ -26,13 +26,14 @@ from subprocess import Popen
 from typing import TYPE_CHECKING
 from urllib import request
 
+import config
+
 if TYPE_CHECKING:
     from typing import List, Optional
 
 DESCRIPTION = 'argus, command-line JIRA multi-tool'
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 TEST_DIR = os.path.join(BASE_DIR, 'tests')
-CUSTOM_PARAMS_PATH = 'conf/custom_params.cfg'
 
 conf_dir = 'conf'
 jenkins_conf_dir = os.path.join(conf_dir, 'jenkins')
@@ -300,10 +301,6 @@ class DEPENDENCY_TYPE:
 
 
 class Config:
-    JENKINS_URL = 'unknown'
-    JENKINS_BRANCHES = 'unknown'
-    JENKINS_PROJECT = 'unknown'
-
     if is_win():
         Browser = 'chrome'
     elif is_mac():
@@ -316,7 +313,6 @@ class Config:
     def init_argus(cls):
         cls._init_directories()
         cls._init_jenkins_config()
-        cls._init_custom_config()
 
     @staticmethod
     def _init_directories():
@@ -348,23 +344,6 @@ class Config:
 
         with open(conf_path, 'w') as config_file:
             config_parser.write(config_file)
-
-    @staticmethod
-    def _init_custom_config():
-        custom_params_path = CUSTOM_PARAMS_PATH
-        if unit_test:
-            custom_params_path = os.path.join(TEST_DIR, CUSTOM_PARAMS_PATH)
-        if not os.path.exists(custom_params_path):
-            print('WARNING! Cannot find conf/custom_params.cfg. Will not have default project nor jenkins config data.')
-            Config.JENKINS_URL = 'https://test.jenkins.com'
-            Config.JENKINS_BRANCHES = ['branch_1.0', 'branch_2.0', 'branch_3.0']
-            Config.JENKINS_PROJECT = ['project_1', 'project_2', 'project_3']
-        else:
-            config_parser = configparser.RawConfigParser()
-            config_parser.read(custom_params_path)
-            Config.JENKINS_URL = config_parser.get('JENKINS', 'url').rstrip('/')
-            Config.JENKINS_BRANCHES = config_parser.get('JENKINS', 'branches').split(',')
-            Config.JENKINS_PROJECT = config_parser.get('JENKINS', 'project_name')
 
 
 def get_build_options():
@@ -423,8 +402,8 @@ def load_file(tpl):
     try:
         if not os.path.exists(file_path):
             request.URLopener().retrieve(
-                '{}/job/{}-{}-{}/{}/testReport/api/json'.format(Config.JENKINS_URL,
-                                                                Config.JENKINS_PROJECT, branch,
+                '{}/job/{}-{}-{}/{}/testReport/api/json'.format(config.JENKINS_URL,
+                                                                config.JENKINS_PROJECT, branch,
                                                                 build_type, build_number),
                 file_path)
     except IOError as e:
