@@ -124,9 +124,9 @@ class JiraIssue(dict):
 
     def matches(self, jira_connection: 'JiraConnection', find: str) -> bool:
         """
-        Tests all values in the ticket to see if they match the input string. Requires input of the JiraConnection
-        you want to compare against to protect against duplicate project names across different JIRA instances.
-        TODO: Can remove the pass-in of a JiraConnection since have since added an invariant of "no duplicate project names"
+        Tests all values in the ticket to see if they match the input string.
+        Requires input of the JiraConnection you want to compare against to protect against
+        duplicate project names across different JIRA instances.
         """
         if self.jira_connection_name == jira_connection.connection_name:
             # Test against issue key separately

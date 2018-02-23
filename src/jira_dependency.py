@@ -28,11 +28,6 @@ class JiraDependency:
     # Track dependencies we run across in tickets that are unknown in order to later prompt to add them to conf
     unknown_dependencies = set()
 
-    # Currently a dumb map from a relationship string and direction to a pretty version of that string. Empty values here
-    # will not be displayed when resolving dependencies nor treated as "legit" dependencies. There's opportunity for removal
-    # of duplication here if we assume most dependencies are 'X, X by' for 'inward, outward' respectively, however there
-    # are enough violations of this rule to make it borderline intractable.
-    # TODO: This should be configurable via flat file
     dep_map = {
         'Automated By:inward': 'automates',
         'Automated By:outward': 'automated by',

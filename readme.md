@@ -20,8 +20,8 @@ Argus provides some key functionality over the existing JIRA web browser or free
   * [r] - Pre-generated reports. Add a [s]ingle user multi-jira report
   * [d] - Dashboard, [d] display dashboard, select the one you just created
     - This should display a dashboard of all open tickets in the multiple JIRA connections in a single dashboard
-    
-* As a Manager: 
+
+* As a Manager:
   * Create a team using the team [m]anagement menu
   * Run [t]eam reports against your defined teams, drilling to individual tickets as needed
 
@@ -44,7 +44,7 @@ Note: Argus uses a local, application-specific password to encode the user and p
 * utils.py: General menu and config utilities
 * jira_utils.py: Querying logic
 * MainMenu: As advertised.
-* DisplayFilter: (Largely TODO) Used to select columns for display, filter based on inclusion criteria (string matching) on results already pulled from JIRA, and (ToDo) change sorting order of results
+* DisplayFilter: Used to select columns for display, filter based on inclusion criteria (string matching) on results already pulled from JIRA, and change sorting order of results
 * TeamManager: Contains logic to run team-based reports
 * Filtering: there are 2 major ways in which things can be filtered:
   - ReportFilter.filter_items has the most flexibility as it's python logic

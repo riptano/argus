@@ -27,8 +27,6 @@ if TYPE_CHECKING:
     from typing import Dict, List
 
 
-# TODO: This needs to be updated post offline jira caching
-
 class TriageUpdate:
 
     """
@@ -63,9 +61,6 @@ class TriageUpdate:
                 if ti.key() == '' or ti.key() == 'Key':
                     continue
                 temp_issues.append(ti)
-
-            # TODO: Handle JiraConnections w/overlapping names with more grace
-            # For now, just check for overlap and barf if we find it
 
             # Parse out project name and link to JiraConnection, so we can use the connection_name to build a
             # complex name and map to an offline cached JiraProject.

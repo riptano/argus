@@ -37,9 +37,7 @@ class TestJenkinsServer(Tester):
         with open(file_path, 'rb') as data_file:
             deserialized_server_job = dill.load(data_file)
 
-        # todo: figure out how to do this without referencing jenkins-cassandra
         url = 'http://jenkins-cassandra.datastax.lan/'
-        # todo: replace call to shuler's job with a job specifically for testing
         job_name = 'mshuler-9608-java9-trunk-cqlsh-tests'
 
         jenkins_server = Jenkins(url)

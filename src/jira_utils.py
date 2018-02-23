@@ -52,7 +52,6 @@ class JiraUtils:
         :param: jql: the JQL to run against the connection and retrieve issues
         :return: list of JIRA Issues matching query
         """
-        # TODO MS.15: Completely remove this and do all offline cached
         print('Querying tickets with jql: {}'.format(jql))
 
         total = sys.maxsize

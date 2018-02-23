@@ -36,6 +36,7 @@ class JiraUserName:
     instead of just one or the other. We also store the team name since these are used in team context only. A JiraUserName
     is uniquely identified by a: the name, b: the jira connection, and c: the team.
     """
+
     def __init__(self, user_name, jira_connection_name, team_name):
         # type: (str, str, str) -> None
         self.user_name = user_name
@@ -248,7 +249,7 @@ class MemberIssuesByStatus:
         :return: Sorted list of keys printed in this report
         """
         print('[Detailed report for {}]'.format(self.primary_name))
-        # TODO: Allow configuration of format for DisplayFilter
+
         df = DisplayFilter.team_details()
 
         idx = 1

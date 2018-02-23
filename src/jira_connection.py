@@ -263,7 +263,6 @@ class JiraConnection:
         # type: () -> List[JiraProject]
         return list(self._cached_jira_projects.values())
 
-    # TODO: Clean up return type, make iterable so it's not materialized, single list
     @property
     def cached_jira_issues(self) -> List[List[JiraIssue]]:
         return list(itertools.chain([list(x.jira_issues.values()) for x in list(self._cached_jira_projects.values())]))
