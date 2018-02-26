@@ -93,11 +93,6 @@ class JiraDashboard:
                     continue
                 to_match = get_input('Filter for what string?', False)
 
-                # For now, we convert the string name to the Column object as we key by a mapping of Column to filter regex for matching
-                # TODO: This should be changed to a Dict[str, List[ColumnFilter]] objects going forward and made consistent across all users
-                # This will both tidy up this abstraction but also allow matching against multiple regexes per Column rather than the current one,
-                # as well as enforce the 1:many relationship we're going for on filtering instead of the suboptimal many:1 our
-                # data structures currently give us.
                 column_list = [col for col in df.included_columns if col.name == column_name]
                 assert len(column_list) == 1, 'Expected only 1 match with column name {}, got {}'.format(column_name, len(column_list))
                 filters[column_list[0]] = to_match

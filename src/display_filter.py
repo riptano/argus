@@ -44,7 +44,6 @@ class DisplayFilter:
     # Used to print variable #'s of indentation on dependency chains
     _current_depth = 0
 
-    # TODO: Make this configurable via options menu, and consider hard-coding this for certain reports
     _max_depth = 5
 
     # Set used to track JiraIssue keys we've already seen during a dependency chain traversal. This prevents infinite recursion.
@@ -98,12 +97,10 @@ class DisplayFilter:
         else:
             self.included_columns.insert(index, new_col)
 
-    # TODO: Implement
     def save_config(self):
         pass
 
     @classmethod
-    # TODO: Implement
     def from_file(cls):
         pass
 
@@ -244,9 +241,6 @@ class DisplayFilter:
 
 
 class ColumnFilter:
-    """
-    TODO: Nest column matching logic in here, refactor to its own code, make this more robust
-    """
 
     def __init__(self, column_name, filter_string, filter_type):
         self.column_name = column_name

@@ -39,11 +39,10 @@ class MainMenu:
         parser = optparse.OptionParser(description=DESCRIPTION, usage='Usage: %prog [options] [host [port]]', version='argus ' + __version__)
         parser.add_option('-p', '--password', help='provide local password on command-line rather than being prompted')
         parser.add_option('-d', '--dashboard', help='name of dashboard to auto-execute into')
-        parser.add_option('-j', '--jenkins_report', help='(TODO) execute and print a jenkins report, exiting upon completion', default=False, action='store_true')
+        parser.add_option('-j', '--jenkins_report', help='TODO:#106 execute and print a jenkins report, exiting upon completion', default=False, action='store_true')
         parser.add_option('-n', '--jenkins_project_name', help='Name of consistent root of project names in Jenkins')
-        parser.add_option('-b', '--jenkins_branch', help='(TODO) Used with -j, specify branch to run reports against')
-        parser.add_option('-t', '--jenkins_type', help='(TODO) Used with -j, specify type of test [u]nit test, or [d]test to report against')
-        # TODO: Make this available once triage_update is brought up to speed now that we cache JiraIssues offline
+        parser.add_option('-b', '--jenkins_branch', help='TODO:#107 Used with -j, specify branch to run reports against')
+        parser.add_option('-t', '--jenkins_type', help='TODO:#108 Used with -j, specify type of test [u]nit test, or [d]test to report against')
         # parser.add_option('-c', '--triage_csv', help='Specifies local file containing [link, key, summary, assignee, reviewer, status, prio, repro, scope, component] triage file to update against live JIRA data')
         # parser.add_option('-o', '--triage_out', help='Output file name for updated triage data. If not provided, prints to stdout.')
         parser.add_option('-u', '--unit_test', help='Unit testing mode, does not connect servers, saves config changes to test/ folder', action='store_true', dest='unit_test')
@@ -78,7 +77,6 @@ class MainMenu:
             os.mkdir(os.path.join('test', 'data'))
             utils.unit_test = True
 
-            # TODO: Uncomment and integrate w/unit-test framework and assert equality based on src time
             # Run one-off test on time utils
             # now = time_converter.current_time()
             # print('Now is: {}'.format(now))

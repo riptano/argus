@@ -284,7 +284,6 @@ class TeamManager:
         for member in team_members:
             member.sort_tickets()
 
-    # TODO: Add ability to pass a customized DisplayFilter or column list to format TeamMemberTickets output
     @staticmethod
     def _run_report(jira_manager, team, report_filter):
         # type: (JiraManager, Team, ReportFilter) -> None

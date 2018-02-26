@@ -232,7 +232,7 @@ def pick_value(header,                              # type: str
     :param allow_exit: whether to allow 'q' option and None return
     :param exit_text: behavior to prompt next to 'q' option (retry, quit back, etc)
     :param sort: Leave input options alone or re-order them
-    :param silent: Suppress printing of options. Frankly, I'm not sure who relies on this parameter. TODO?
+    :param silent: Suppress printing of options.
     :return: Selected option, None if 'q' selected
     """
     try:

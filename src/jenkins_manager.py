@@ -402,7 +402,6 @@ class JenkinsManager:
     def print_job_options(self, jobs, connection=False):
         # type: (List[JenkinsJob], bool) -> None
         # this is a terrible way of doing this
-        # todo: get rid of connection bool and figure out a better way to do this
         sorted_jobs = JenkinsConnection.sort_jobs(jobs)
         if connection:
             self.active_connection.print_job_report(sorted_jobs)

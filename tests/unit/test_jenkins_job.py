@@ -68,7 +68,6 @@ class TestJenkinsJobMethods(Tester):
 
 class TestJenkinsJobConstructor(Tester):
     """Unit tests for all types of builds to test JenkinsJob __init__ method."""
-    # todo: add more / better assertions to ensure that jenkins_jobs are being created successfully
 
     def setUp(self):
         super().setUp()

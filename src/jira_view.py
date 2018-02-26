@@ -48,7 +48,6 @@ class JiraView:
 
         self._teams = {}  # type: Dict[str, Team]
 
-        # TODO: Allow / support customization of display filter on per-view basis in Edit View dialog
         self.display_filter = DisplayFilter()
 
     def add_single_filter(self, name, value, filter_type, and_or):
