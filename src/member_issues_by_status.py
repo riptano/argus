@@ -72,10 +72,10 @@ class MemberIssuesByStatus:
         self._aliased_names = {}
 
         # WARNING: These containers also need to be reflected in self.clear and self.sort_tickets
-        self.assigned = []
-        self.closed = []
-        self.reviewer = []
-        self.reviewed = []
+        self.assigned = []  # type: List[JiraIssue]
+        self.closed = []  # type: List[JiraIssue]
+        self.reviewer = []  # type: List[JiraIssue]
+        self.reviewed = []  # type: List[JiraIssue]
 
     def clone_empty(self):
         """
@@ -236,6 +236,10 @@ class MemberIssuesByStatus:
         self.closed = []
         self.reviewer = []
         self.reviewed = []
+
+    @property
+    def all_tickets(self) -> List[JiraIssue]:
+        return self.assigned + self.closed + self.reviewer + self.reviewed
 
     def display_member_issues(self, jira_manager: JiraManager, report_filter: 'ReportFilter') -> List[JiraIssue]:
         """

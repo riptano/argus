@@ -237,8 +237,8 @@ class ReportFixVersion(ReportFilter):
 
     def __init__(self):
         ReportFilter.__init__(self)
-        self.columns = ['Assigned', 'Closed non-test', 'Reviewed', 'Closed Test']
-        self.issues = {'Assigned': [], 'Closed non-test': [], 'Reviewed': [], 'Closed Test': []}
+        self.columns = ['Assigned', 'Closed non-test', 'Reviewed', 'Closed Test', 'Total']
+        self.issues = {'Assigned': [], 'Closed non-test': [], 'Reviewed': [], 'Closed Test': [], 'Total': []}
         self._fix_version = None
 
     def process_issues(self, member_issues: MemberIssuesByStatus) -> None:
@@ -248,6 +248,7 @@ class ReportFixVersion(ReportFilter):
         self._add_matching_issues('Closed non-test', [x for x in member_issues.closed if not x.is_test])
         self._add_matching_issues('Closed Test', [x for x in member_issues.closed if x.is_test])
         self._add_matching_issues('Reviewed', member_issues.reviewed)
+        self._add_matching_issues('Total', member_issues.all_tickets)
 
     def set_fix_version(self, new_version: str) -> None:
         self._fix_version = new_version
