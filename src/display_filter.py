@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Set
 from src import utils
 from src.jira_issue import JiraIssue
 from src.jira_utils import JiraUtils
-from src.utils import get_input, pick_value
 
 if TYPE_CHECKING:
     from src.jira_manager import JiraManager
@@ -58,6 +57,12 @@ class DisplayFilter:
         # Used to easily filter to open only, since a Column-based match would require multiple filter entries (None, unresolved, etc)
         self.open_only = False
 
+        # Allow per-report suppression of dependency resolution as some reports are not well served by them
+        self.suppress_dependencies = False  # type: bool
+
+        # Toggle between printing and using the system pager
+        self.use_pager = True  # type: bool
+
     @classmethod
     def default(cls):
         df = DisplayFilter()
@@ -85,6 +90,8 @@ class DisplayFilter:
         df.include_column('status', 'status', 8)
         df.include_column('priority', 'prio', 6)
         df.include_column('resolution', 'resolution', 10)
+        df.suppress_dependencies = True
+        df.use_pager = False
         return df
 
     def include_column(self, column_name: str, pretty_name: str, width: int, index: int=-1) -> None:
@@ -152,7 +159,11 @@ class DisplayFilter:
             DisplayFilter._seen_keys = set()
             result += self._format_jira_issue(jira_manager, issue, filters, displayed_issues, None, force_show_dependencies)
 
-        pydoc.pager(result)
+        if self.use_pager:
+            pydoc.pager(result)
+        else:
+            print(result)
+
         if filtered_count != 0:
             print('Skipped {} filtered results'.format(filtered_count))
         return displayed_issues
@@ -185,7 +196,7 @@ class DisplayFilter:
         displayed_issues.append(issue)
 
         DisplayFilter._current_depth += 1
-        if force_show_dependencies or utils.show_dependencies:
+        if not self.suppress_dependencies and (force_show_dependencies or utils.show_dependencies):
             # Display all dependencies of this ticket
             for dependency in issue.dependencies:
                 if dependency.target.issue_key in DisplayFilter._seen_keys:

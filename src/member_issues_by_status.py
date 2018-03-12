@@ -13,20 +13,19 @@
 # limitations under the License.
 
 import itertools
-from typing import TYPE_CHECKING
-
+from typing import TYPE_CHECKING, List, Optional
 
 from src.display_filter import DisplayFilter
+from src.jira_issue import JiraIssue
+from src.jira_manager import JiraManager
 from src.jira_utils import JiraUtils
-from src.utils import argus_debug, pick_value
+from src.utils import pick_value
 
 if TYPE_CHECKING:
     from configparser import RawConfigParser
     from src.jira_connection import JiraConnection
-    from src.jira_manager import JiraManager
     from src.jira_issue import JiraIssue
     from src.team_reports import ReportFilter
-    from typing import List, Optional
 
 
 class JiraUserName:
@@ -238,8 +237,7 @@ class MemberIssuesByStatus:
         self.reviewer = []
         self.reviewed = []
 
-    def display_member_issues(self, jira_manager, report_filter):
-        # type: (JiraManager, ReportFilter) -> List[JiraIssue]
+    def display_member_issues(self, jira_manager: JiraManager, report_filter: 'ReportFilter') -> List[JiraIssue]:
         """
         Prints details for tickets by category. This method is always executed in the context of having a relevant
         ReportFilter in use for the display. Can use a no-op all-inclusive ReportFilter if you want to report all issues

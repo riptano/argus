@@ -32,6 +32,7 @@ class ReportType:
     CURRENT_LOAD = 2
     TEST_LOAD = 3
     REVIEW_LOAD = 4
+    FIXVERSION = 5
 
     @classmethod
     def from_int(cls, value):
@@ -44,6 +45,8 @@ class ReportType:
             return ReportType.TEST_LOAD
         elif value == 4:
             return ReportType.REVIEW_LOAD
+        elif value == 5:
+            return ReportType.FIXVERSION
         else:
             return ReportType.UNKNOWN
 
@@ -124,20 +127,27 @@ class ReportFilter:
         """
         return jira_issue.issue_key in self.known_issues
 
+    def set_header(self, new_header: str) -> None:
+        self.header = new_header
+
     @staticmethod
     def get_since():
         return get_input('Since what date? (-2m or -1y or -5w or -2d, etc)')
 
     @property
-    def needs_duration(self):
-        # type: () -> bool
+    def needs_duration(self) -> bool:
         """
         Determines whether to prompt for and store self.since on this report for matching purposes.
         """
         return False
 
-    def _matches_time(self, jira_issue):
-        # type: (JiraIssue) -> bool
+    def prompt_for_data(self) -> None:
+        """
+        Prompt user for necessary data for this report. Defaults to a no-op
+        """
+        pass
+
+    def _matches_time(self, jira_issue: JiraIssue) -> bool:
         """
         Compares against self.since to determine if the jira_issue should be included or not
         """
@@ -173,16 +183,14 @@ class ReportMomentum(ReportFilter):
         self.columns = ['Closed non-test', 'Reviewed', 'Closed Test']
         self.issues = {'Closed non-test': [], 'Reviewed': [], 'Closed Test': []}
 
-    def process_issues(self, member_issues):
-        # type: (MemberIssuesByStatus) -> None
+    def process_issues(self, member_issues: MemberIssuesByStatus) -> None:
         assert member_issues is not None, 'process_issues call on a null MemberIssuesByStatus object.'
 
         self._add_matching_issues('Closed non-test', [x for x in member_issues.closed if not x.is_test])
         self._add_matching_issues('Closed Test', [x for x in member_issues.closed if x.is_test])
         self._add_matching_issues('Reviewed', member_issues.reviewed)
 
-    def matches(self, jira_issue):
-        # type (JiraIssue) -> bool
+    def matches(self, jira_issue: JiraIssue) -> bool:
         """
         We only care about whether or not this ticket was resolved in our timespan
         """
@@ -213,10 +221,54 @@ class ReportCurrentLoad(ReportFilter):
         self._add_matching_issues('review', [x for x in member_issues.reviewer if 'Patch Available' != x.status])
         self._add_matching_issues('PA review', [x for x in member_issues.reviewer if 'Patch Available' == x.status])
 
-    def matches(self, jira_issue):
-        # type (JiraIssue) -> bool
+    def matches(self, jira_issue: JiraIssue) -> bool:
         # Want unresolved issues only for open report. Don't need to time bound
         return jira_issue.is_open
+
+
+class ReportFixVersion(ReportFilter):
+
+    """
+    bug, test, feature, review, PA review
+    Filters based on fixversion
+
+    """
+    header = 'FixVersion Momentum Report'
+
+    def __init__(self):
+        ReportFilter.__init__(self)
+        self.columns = ['Assigned', 'Closed non-test', 'Reviewed', 'Closed Test']
+        self.issues = {'Assigned': [], 'Closed non-test': [], 'Reviewed': [], 'Closed Test': []}
+        self._fix_version = None
+
+    def process_issues(self, member_issues: MemberIssuesByStatus) -> None:
+        assert member_issues is not None, 'process_issues call on a null MemberIssuesByStatus object.'
+
+        self._add_matching_issues('Assigned', [x for x in member_issues.assigned])
+        self._add_matching_issues('Closed non-test', [x for x in member_issues.closed if not x.is_test])
+        self._add_matching_issues('Closed Test', [x for x in member_issues.closed if x.is_test])
+        self._add_matching_issues('Reviewed', member_issues.reviewed)
+
+    def set_fix_version(self, new_version: str) -> None:
+        self._fix_version = new_version
+
+    def matches(self, jira_issue: JiraIssue) -> bool:
+        """
+        Match against FixVersion, any ticket type, any status
+        """
+        assert self._fix_version is not None, 'Need to populate FixVersion in report before matching and populating'
+        if self._matches_time(jira_issue):
+            return jira_issue.has_fix_version(self._fix_version)
+        return False
+
+    def prompt_for_data(self) -> None:
+        self._fix_version = get_input('Run report against what FixVersion?', False)
+        if not self._fix_version:
+            raise Exception('Must input non-empty value for fixversion')
+
+    @property
+    def needs_duration(self):
+        return True
 
 
 class ReportTestLoad(ReportFilter):
@@ -231,13 +283,11 @@ class ReportTestLoad(ReportFilter):
         self.columns = ['assigned', 'closed']
         self.issues = {'assigned': [], 'closed': []}
 
-    def process_issues(self, member_issues):
-        # type: (MemberIssuesByStatus) -> None
+    def process_issues(self, member_issues: MemberIssuesByStatus) -> None:
         self._add_matching_issues('assigned', member_issues.assigned)
         self._add_matching_issues('closed', member_issues.closed)
 
-    def matches(self, jira_issue):
-        # type (JiraIssue) -> bool
+    def matches(self, jira_issue: JiraIssue) -> bool:
         # Open issues or filtered by recency only, test issues only. Test is denoted by a label at this point
         if not jira_issue.is_test:
             return False

@@ -25,7 +25,7 @@ from src.jira_manager import JiraManager
 from src.jira_utils import JiraUtils
 from src.member_issues_by_status import JiraUserName, MemberIssuesByStatus
 from src.team import Team
-from src.team_reports import (ReportCurrentLoad, ReportFilter, ReportMomentum,
+from src.team_reports import (ReportCurrentLoad, ReportFilter, ReportFixVersion, ReportMomentum,
                               ReportReviewLoad, ReportTestLoad, ReportType)
 from src.utils import (clear, conf_dir, get_input, is_yes, pause, pick_value,
                        print_separator, save_argus_config)
@@ -217,7 +217,8 @@ class TeamManager:
             ReportType.MOMENTUM: ReportMomentum(),
             ReportType.CURRENT_LOAD: ReportCurrentLoad(),
             ReportType.TEST_LOAD: ReportTestLoad(),
-            ReportType.REVIEW_LOAD: ReportReviewLoad()
+            ReportType.REVIEW_LOAD: ReportReviewLoad(),
+            ReportType.FIXVERSION: ReportFixVersion()
         }
 
         while True:
@@ -237,6 +238,7 @@ class TeamManager:
             print('{}: Team load report: assigned bugs, assigned tests, assigned features, assigned reviews, patch available reviews'.format(ReportType.CURRENT_LOAD))
             print('{}: Test load report: snapshot of currently assigned tests and closed tests in a custom time frame'.format(ReportType.TEST_LOAD))
             print('{}: Review load report: snapshot of currently assigned reviews, Patch Available reviews, and finished reviews in a custom time frame'.format(ReportType.REVIEW_LOAD))
+            print('{}: FixVersion report: show data for all tickets on a fixversion over time frame'.format(ReportType.FIXVERSION))
             print('q: Cancel')
             print('---------------------')
             choice = get_input(':')
@@ -285,11 +287,12 @@ class TeamManager:
             member.sort_tickets()
 
     @staticmethod
-    def _run_report(jira_manager, team, report_filter):
-        # type: (JiraManager, Team, ReportFilter) -> None
+    def _run_report(jira_manager: JiraManager, team: Team, report_filter: ReportFilter) -> None:
         # We prompt for a new 'since' on each iteration of the loop
         if report_filter.needs_duration:
             report_filter.since = time_utils.since_now(ReportFilter.get_since())
+
+        report_filter.prompt_for_data()
 
         try:
             sorted_member_issues = sorted(team.members, key=lambda s: s.primary_name.user_name)
