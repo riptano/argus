@@ -66,11 +66,11 @@ class MemberIssuesByStatus:
         self._aliased_names = {}
 
         # WARNING: These containers also need to be reflected in self.clear and self.sort_tickets
-        self.assigned = List[JiraIssue]
-        self.assigned = List[JiraIssue]
-        self.closed = List[JiraIssue]
-        self.reviewer = List[JiraIssue]
-        self.reviewed = List[JiraIssue]
+        self.assigned: List[JiraIssue] = []
+        self.assigned: List[JiraIssue] = []
+        self.closed: List[JiraIssue] = []
+        self.reviewer: List[JiraIssue] = []
+        self.reviewed: List[JiraIssue] = []
 
     def clone_empty(self):
         """

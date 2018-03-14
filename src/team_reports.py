@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import datetime
-from typing import TYPE_CHECKING
 
 from dateutil import parser
 
