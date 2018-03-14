@@ -20,9 +20,7 @@ from dateutil import parser
 from src.jira_issue import JiraIssue
 from src.member_issues_by_status import MemberIssuesByStatus
 from src.utils import get_input
-
-if TYPE_CHECKING:
-    from typing import List
+from typing import List
 
 
 class ReportType:
@@ -87,16 +85,13 @@ class ReportFilter:
             result += '{:<20}'.format(column)
         return result
 
-    def process_issues(self, member_issues):
-        # type: (MemberIssuesByStatus) -> None
+    def process_issues(self, member_issues: 'MemberIssuesByStatus') -> None:
         raise NotImplementedError()
 
-    def matches(self, jira_issue):
-        # type (JiraIssue) -> bool
+    def matches(self, jira_issue: JiraIssue) -> bool:
         raise NotImplementedError()
 
-    def _add_matching_issues(self, column_name, jira_issues):
-        # type: (str, List[JiraIssue]) -> None
+    def _add_matching_issues(self, column_name: str, jira_issues: List[JiraIssue]) -> None:
         """
         Adds issues matching this report filters criteria to the specified column
         """
@@ -105,23 +100,20 @@ class ReportFilter:
         for jira_issue in matching_issues:
             self.known_issues.add(jira_issue.issue_key)
 
-    def issue_count(self, issue_type):
-        # type: (str) -> int
+    def issue_count(self, issue_type: str) -> int:
         return len(self.issues[issue_type])
 
-    def print_all_counts(self, name):
+    def print_all_counts(self, name: str) -> str:
         # type: (str) -> str
         result = '{:<30}'.format(name)
         for column in self.columns:
             result += '{:<20}'.format(len(self.issues[column]))
         return result
 
-    def get_issues(self, issue_type):
-        # type: (str) -> List[JiraIssue]
+    def get_issues(self, issue_type: str) -> List[JiraIssue]:
         return self.issues[issue_type]
 
-    def contains_issue(self, jira_issue):
-        # type: (JiraIssue) -> bool
+    def contains_issue(self, jira_issue: JiraIssue) -> bool:
         """
         Used after report population to determine if an issue should be displayed by a MemberIssuesByStatus
         """
