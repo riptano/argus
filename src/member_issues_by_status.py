@@ -13,20 +13,15 @@
 # limitations under the License.
 
 import itertools
-from typing import TYPE_CHECKING
-
+from configparser import RawConfigParser
+from typing import List, Optional
 
 from src.display_filter import DisplayFilter
+from src.jira_connection import JiraConnection
+from src.jira_issue import JiraIssue
+from src.jira_manager import JiraManager
 from src.jira_utils import JiraUtils
-from src.utils import argus_debug, pick_value
-
-if TYPE_CHECKING:
-    from configparser import RawConfigParser
-    from src.jira_connection import JiraConnection
-    from src.jira_manager import JiraManager
-    from src.jira_issue import JiraIssue
-    from src.team_reports import ReportFilter
-    from typing import List, Optional
+from src.utils import pick_value
 
 
 class JiraUserName:
@@ -37,8 +32,7 @@ class JiraUserName:
     is uniquely identified by a: the name, b: the jira connection, and c: the team.
     """
 
-    def __init__(self, user_name, jira_connection_name, team_name):
-        # type: (str, str, str) -> None
+    def __init__(self, user_name: str, jira_connection_name: str, team_name: str) -> None:
         self.user_name = user_name
         self.jira_connection_name = jira_connection_name
         self.team_name = team_name
@@ -48,8 +42,7 @@ class JiraUserName:
         return '{}:{}:{}'.format(self.user_name, self.jira_connection_name, self.team_name)
 
     @classmethod
-    def from_combined_string(cls, combined_string):
-        # type: (str) -> JiraUserName
+    def from_combined_string(cls, combined_string: str) -> 'JiraUserName':
         sa = combined_string.split(':')
         if len(sa) != 3:
             raise Exception('Got bad string to JiraUserName.from_combined_string. Expected : delim with 3 members, got: {}'.format(combined_string))
@@ -73,10 +66,11 @@ class MemberIssuesByStatus:
         self._aliased_names = {}
 
         # WARNING: These containers also need to be reflected in self.clear and self.sort_tickets
-        self.assigned = []
-        self.closed = []
-        self.reviewer = []
-        self.reviewed = []
+        self.assigned: List[JiraIssue] = []
+        self.assigned: List[JiraIssue] = []
+        self.closed: List[JiraIssue] = []
+        self.reviewer: List[JiraIssue] = []
+        self.reviewed: List[JiraIssue] = []
 
     def clone_empty(self):
         """
@@ -87,8 +81,7 @@ class MemberIssuesByStatus:
             result.add_alias(alias)
         return result
 
-    def save_config(self, config_parser):
-        # type: (RawConfigParser) -> None
+    def save_config(self, config_parser: RawConfigParser) -> None:
         config_parser.add_section(self.full_name)
 
         # Create comma delimited list of : delimited known names for this linked user
@@ -98,8 +91,7 @@ class MemberIssuesByStatus:
         # We do not serialize the issues we iterate over within this object
 
     @classmethod
-    def from_file(cls, root_name, config_parser):
-        # type: (str, RawConfigParser) -> MemberIssuesByStatus
+    def from_file(cls, root_name: str, config_parser: RawConfigParser) -> 'MemberIssuesByStatus':
         new_user = JiraUserName.from_combined_string(root_name)
         result = MemberIssuesByStatus(new_user)
 
@@ -110,16 +102,14 @@ class MemberIssuesByStatus:
         return result
 
     @property
-    def connection_names(self):
-        # type: () -> List[str]
+    def connection_names(self) -> List[str]:
         result = [self.primary_name.jira_connection_name]
         for combined_name in list(self._aliased_names.values()):
             result.append(combined_name.jira_connection_name)
         return result
 
     @property
-    def full_name(self):
-        # type: () -> str
+    def full_name(self) -> str:
         return self.primary_name.to_combined_string
 
     @property
@@ -127,16 +117,13 @@ class MemberIssuesByStatus:
         return self.primary_name.user_name
 
     @property
-    def primary_team(self):
-        # type: () -> str
+    def primary_team(self) -> str:
         return self.primary_name.team_name
 
-    def add_alias(self, jira_user_name):
-        # type: (JiraUserName) -> None
+    def add_alias(self, jira_user_name: JiraUserName) -> None:
         self._aliased_names[jira_user_name.to_combined_string] = jira_user_name
 
-    def remove_alias(self):
-        # type: () -> bool
+    def remove_alias(self) -> bool:
         if len(self._aliased_names) == 0:
             print('No aliases. Returning.')
             return False
@@ -186,21 +173,20 @@ class MemberIssuesByStatus:
         return True
 
     @staticmethod
-    def _debug_ticket(jira_issue, input):
+    def _debug_ticket(jira_issue, to_print: str):
         """
         Developer tool to debug matching / JiraIssue categorization logic for reports
         """
         if MemberIssuesByStatus.is_debug_jira_issue(jira_issue):
-            print('DEBUG: {}'.format(input))
+            print('DEBUG: {}'.format(to_print))
 
     @staticmethod
-    def is_debug_jira_issue(jira_issue):
+    def is_debug_jira_issue(jira_issue: JiraIssue):
         # Change XXX-1234 to the ticket you'd like to debug, add calls to _debug_ticket in relevant locations
         # return jira_issue.issue_key == 'XXX-1234'
         return False
 
-    def get_owning_jira_user_name(self, jira_connection, jira_issue):
-        # type: (JiraConnection, JiraIssue) -> Optional[JiraUserName]
+    def get_owning_jira_user_name(self, jira_connection: JiraConnection, jira_issue: JiraIssue) -> Optional[JiraUserName]:
         """
         Determines which, if any, of the JiraUserNames associated with this MemberIssuesByStatus worked on this JiraIssue
         """
@@ -238,8 +224,11 @@ class MemberIssuesByStatus:
         self.reviewer = []
         self.reviewed = []
 
-    def display_member_issues(self, jira_manager, report_filter):
-        # type: (JiraManager, ReportFilter) -> List[JiraIssue]
+    @property
+    def all_tickets(self) -> List[JiraIssue]:
+        return self.assigned + self.closed + self.reviewer + self.reviewed
+
+    def display_member_issues(self, jira_manager: JiraManager, report_filter: 'ReportFilter') -> List[JiraIssue]:
         """
         Prints details for tickets by category. This method is always executed in the context of having a relevant
         ReportFilter in use for the display. Can use a no-op all-inclusive ReportFilter if you want to report all issues

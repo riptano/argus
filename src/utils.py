@@ -149,8 +149,7 @@ def indent(num, value):
     print(to_print + value)
 
 
-def get_input(prompt, lowered=True):
-    # type: (str, bool) -> str
+def get_input(prompt: str, lowered: bool=True) -> str:
     response = input('{} '.format(prompt)).strip()
     if lowered:
         response = response.lower()
