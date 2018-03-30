@@ -20,11 +20,9 @@ import traceback
 from jira import JIRAError
 from typing import Dict, Optional, List, TYPE_CHECKING
 
-from src import utils
 from src.display_filter import DisplayFilter
 from src.jira_connection import JiraConnection
 from src.jira_dashboard import JiraDashboard
-from src.jira_dependency import JiraDependency
 from src.jira_filter import JiraFilter
 from src.jira_project import JiraProject
 from src.jira_utils import JiraUtils
@@ -107,11 +105,6 @@ class JiraManager:
                         dash_views[view] = self.jira_views[view]
                     self.jira_dashboards[dash] = JiraDashboard(dash, dash_views)
 
-        if len(self._jira_connections) == 0:
-            print_separator(30)
-            print('No JIRA Connections found. Prompting to add first connection.')
-            self.add_connection()
-
         # Initialize JiraProjects from locally cached files
         for file_name in os.listdir(jira_project_dir):
             full_path = os.path.join(jira_project_dir, file_name)
@@ -139,6 +132,11 @@ class JiraManager:
             except (configparser.NoSectionError, ConfigError) as e:
                 print('WARNING! Encountered error initializing JiraProject from file {}: {}'.format(full_path, e))
                 print('This JiraProject will not be initialized. Remove it manually from disk in conf/jira/projects and data/jira/')
+
+        if len(self._jira_connections) == 0:
+            print_separator(30)
+            print('No JIRA Connections found. Prompting to add first connection.')
+            self.add_connection()
 
         if os.path.exists('conf/custom_params.cfg'):
             config_parser = configparser.RawConfigParser()
@@ -181,15 +179,10 @@ class JiraManager:
                         break
 
                 new_jira_project = JiraProject(parent_jira_connection, project_name, url, custom_fields)
-                new_jira_project.refresh()
                 parent_jira_connection.add_and_link_jira_project(new_jira_project)
         print('Resolving dependencies between JiraIssues')
         self._resolve_issue_dependencies()
         print('JiraManager initialization complete.')
-
-    def init_view_teams(self, team_manager):
-        for jv in self.jira_views:
-            jv.init_teams(team_manager)
 
     def add_connection(self, prompt: str='Name this connection:') -> Optional[JiraConnection]:
         """
@@ -411,22 +404,15 @@ class JiraManager:
         """
         Used during development to bypass complex menu operations and try out a single new operation outside unit testing
         """
-        print_separator(60)
-        print('Resolving deps')
-        self._resolve_issue_dependencies()
-        default_filter = DisplayFilter.default()
-        default_filter.open_only = True
-        utils.show_dependencies = True
-        utils.show_only_open_dependencies = True
-        for jira_connection in self.jira_connections():
-            if jira_connection.connection_name == 'ds':
-                print_separator(30)
-                print('Results for connection: {}'.format(jira_connection))
-                for issue_list in jira_connection.cached_jira_issues:
-                    default_filter.display_and_return_sorted_issues(self, issue_list, 1, None)
-        for dep_type in sorted(JiraDependency.unknown_dependencies):
-            print('Found unknown dependency: {}'.format(dep_type))
-        pause()
+        conn = self._jira_connections['ds']
+        ji = JiraUtils.get_single_issue(conn, 'DB-1193')
+        print('Printing non-custom fields from retrieved and constructed JiraIssue')
+        keys = ji.keys()
+        for k in sorted(keys):
+            if 'custom' in k:
+                continue
+            print('   {}:{},'.format(k, ji[k]))
+        print('And scene.')
 
     def search_projects(self):
         """

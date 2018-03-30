@@ -63,13 +63,24 @@ class JiraUtils:
             retrieved += len(queried)
             # DisplayFilter now works solely on offline cached JiraIssue structures, so we convert now for interim
             for issue in queried:
-                try:
-                    new_jira_issue = JiraIssue(jira_connection, issue)
-                    results.append(new_jira_issue)
-                except ConfigError as ce:
-                    print('Error on JiraIssue creation: {}. Skipping {}.'.format(ce, str(issue)))
+                new_jira_issue = JiraIssue(jira_connection, issue)
+                print('Converted to JiraIssue: {}'.format(new_jira_issue))
+                results.append(new_jira_issue)
 
         return results
+
+    @staticmethod
+    def get_single_issue(jira_connection: 'JiraConnection', issue_key: str) -> JiraIssue:
+        """
+        Queries out a single JiraIssue. Used for testing
+        """
+        jql = 'issuekey = {}'.format(issue_key)
+        print('Getting issue with JQL: {}'.format(jql))
+        queried = jira_connection.search_issues(jql, startAt=0)
+        assert len(queried) == 1, 'Expected 1 result for issuekey {}. Got {}'.format(issue_key, len(queried))
+        for issue in queried:
+            ji = JiraIssue(jira_connection, issue)
+            return ji
 
     @staticmethod
     def get_issues_for_project(jira_connection: 'JiraConnection', project_name: str, update_cutoff: Optional[str]=None) -> List['JiraIssue']:

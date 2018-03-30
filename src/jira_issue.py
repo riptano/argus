@@ -186,8 +186,16 @@ class JiraIssue(dict):
         return self['issuetype']
 
     @property
+    def priority(self) -> Optional[str]:
+        return self['priority']
+
+    @property
     def status(self) -> Optional[str]:
         return self['status']
+
+    @property
+    def resolution(self) -> Optional[str]:
+        return self['resolution']
 
     @property
     def is_feature(self) -> bool:
@@ -198,6 +206,10 @@ class JiraIssue(dict):
         if self.matches_label('test', False) or self.issuetype == 'Test':
             return True
         return False
+
+    @property
+    def updated(self) -> Optional[str]:
+        return None if 'updated' not in self else self['updated']
 
     # ----------------------------------------------------------------------------------------------------
 
@@ -268,11 +280,16 @@ class JiraIssue(dict):
             return None
         return self[field_name]
 
+    @property
     def component_list(self) -> List[str]:
         """
         Returns a colon-delimited list of components in this JiraIssue
         """
-        return re.findall("name=u'([A-Za-z0-9_ \-]+)'", self['components'])
+        match = re.findall("name='([A-Za-z0-9_ \-]+)'", self['components'])
+        # Check for unicode as well
+        matchu = re.findall("name=u'([A-Za-z0-9_ \-]+)'", self['components'])
+
+        return match + matchu
 
     def resolve_dependencies(self, jira_manager):
         """
@@ -284,7 +301,9 @@ class JiraIssue(dict):
         if not hasattr(self, 'dependencies'):
             self.dependencies = set()  # type: Set[JiraDependency]
 
-        if len(self['issuelinks']) != 0:
+        if not hasattr(self, 'issuelinks'):
+            self['issuelinks'] = set()  # type: Set[str]
+        elif len(self['issuelinks']) != 0:
             dep_array = self['issuelinks'].split(',')
             for dep_str in dep_array:
                 # We have a few ways this can 'no-op', so we protect against them and skip here.

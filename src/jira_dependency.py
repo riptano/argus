@@ -113,6 +113,16 @@ class JiraDependency:
             return None
         return JiraDependency.dep_map[key]
 
+    @property
+    def target_issue_key(self):
+        try:
+            assert self.target is not None, 'Attempted to access target_issue_key in JiraDependency but target is None'
+            assert self.target.issue_key is not None, 'Have target with no issue_key. What we know of target: {}'.format(self.target)
+        except AttributeError as ae:
+            print('Attempted to access a contained JiraIssue as target in JiraDependency missing an issue_key. What we know of target: {}'.format(self.target))
+            exit(-1)
+        return self.target.issue_key
+
     @staticmethod
     def print_unknown_dependency_types() -> None:
         print_separator(30)
@@ -137,10 +147,10 @@ class JiraDependency:
         return fields[0]
 
     def __str__(self):
-        return 'IssueKey: {}. Type: {}. Direction: {}'.format(self.target.issue_key, self.type, self.direction)
+        return 'IssueKey: {}. Type: {}. Direction: {}'.format(self.target_issue_key, self.type, self.direction)
 
     def __eq__(self, other):
         return self.target.issue_key == other.target.issue_key and self.type == other.type and self.direction == other.direction
 
     def __hash__(self):
-        return hash((self.target.issue_key, self.type, self.direction))
+        return hash((self.target_issue_key, self.type, self.direction))

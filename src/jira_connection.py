@@ -228,11 +228,12 @@ class JiraConnection:
         if len(self.possible_projects) == 0:
             print('No projects found in {}.'.format(self.connection_name))
 
-    def add_and_link_jira_project(self, jira_project):
+    def add_and_link_jira_project(self, jira_project: JiraProject) -> None:
         # type: (JiraProject) -> None
         # just overwrite it if we already have one with this name. Expected on init.
         self._cached_jira_projects[jira_project.project_name] = jira_project
         jira_project.jira_connection = self
+        self._refresh_project_names()
 
     def cache_new_jira_project(self, jira_manager: 'JiraManager') -> None:
         project_name = self.pick_project(True)

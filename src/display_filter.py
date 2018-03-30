@@ -114,10 +114,10 @@ class DisplayFilter:
     def _format_spaced_column(self, issue, column):
         # Special handling for components, since it's an array of components in a JiraIssue
         if column.name == 'components' and column.name in issue:
-            cl = issue.component_list()
+            cl = issue.component_list
             for c in cl:
                 print('FOUND COMPONENT: {}'.format(c))
-            to_format = ','.join(issue.component_list())
+            to_format = ','.join(issue.component_list)
         else:
             to_format = 'No Data' if column.name not in issue else issue[column.name]
         return '| {} '.format(to_format[:column.width].ljust(column.width))

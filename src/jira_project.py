@@ -68,9 +68,12 @@ class JiraProject:
 
         # Set our max timestamp based on issues in this object cache
         for jira_issue in list(self.jira_issues.values()):
-            clean_ts = JiraProject.clean_ts(jira_issue['updated'])
-            if clean_ts > self.updated:
-                self.updated = clean_ts
+            try:
+                clean_ts = JiraProject.clean_ts(jira_issue.updated)
+                if clean_ts > self.updated:
+                    self.updated = clean_ts
+            except KeyError as ke:
+                print('Error pulling updated ts from JiraIssue with key: {}. Skipping.'.format(jira_issue.issue_key))
 
         jira_connection.add_and_link_jira_project(self)
         self.add_field_translations_from_file()
@@ -156,7 +159,9 @@ class JiraProject:
             data_file_name = JiraProject.data_file(jira_connection_name, project_name)
             jira_issues = {}
             if not os.path.exists(data_file_name):
-                print('No data file found for JiraProject: {} (missing file: {})'.format(project_name, data_file_name))
+                print('No data file found for JiraProject: {} (missing file: {}). Setting timestamp to epoch'.format(project_name, data_file_name))
+                # reset last seen timestamp to epoch
+                updated = '1970/01/01 00:00'
             else:
                 print('Loading cached JIRA from disk for project: {}'.format(project_name))
                 with open(data_file_name, 'rb') as data_file:
@@ -201,7 +206,7 @@ class JiraProject:
         # Protect against saving during init wiping out the local data file. Shouldn't be an issue but seen it pop up
         # during dev once or twice.
         if len(self.jira_issues) > 0:
-            save_argus_data(list(self.jira_issues.values()), self._data_file())
+            save_argus_data(self.jira_issues.values(), self._data_file())
 
     def delete_on_disk_files(self):
         if utils.unit_test:
@@ -276,8 +281,7 @@ class JiraProject:
         """
         return None if issue_key not in self.jira_issues else self.jira_issues[issue_key]
 
-    def translate_custom_field(self, field_name):
-        # type: (str) -> str
+    def translate_custom_field(self, field_name: str) -> str:
         """
         Returns original name if field isn't custom
         """
