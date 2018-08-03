@@ -23,7 +23,7 @@ import threading
 import time
 from glob import glob
 from subprocess import Popen
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 from urllib import request
 
 if TYPE_CHECKING:
@@ -194,8 +194,7 @@ def pick_substring(header,                              # type: str
                    options,                             # type: List[str]
                    allow_exit=True,                     # type: bool
                    exit_text='back to previous menu'    # type: str
-                   ):
-    # type: (...) -> Optional[str]
+                   ) -> Optional[str]:
     """
     Prompts for regex before passing into regular pick_value
     """
@@ -223,8 +222,7 @@ def pick_value(header,                              # type: str
                exit_text='back to previous menu',   # type: str
                sort=True,                           # type: bool
                silent=False                         # type: bool
-               ):
-    # type: (...) -> Optional[str]
+               ) -> Optional[str]:
     """
     :param header: Message to print before options
     :param options: List of options for user to select from
@@ -431,8 +429,7 @@ def load_file(tpl):
         print(e)
 
 
-def get_connection_name(filename):
-    # type: (str) -> str
+def get_connection_name(filename: str) -> str:
     """
     Get the name of a connection from the name of its data file.
 
@@ -447,8 +444,7 @@ def get_connection_name(filename):
 
 
 class MultiTasker:
-    def __init__(self, max_threads=5, stagger_time=.2, pause_time=1):
-        # type:(int, float, int) -> None
+    def __init__(self, max_threads: int=5, stagger_time: float=.2, pause_time: int=1) -> None:
         """
         Runs jobs asynchronously
         :param max_threads: The max # of threads allowed at a time
@@ -490,8 +486,7 @@ def init_tab_completer():
     readline.set_completer_delims(delims)
 
 
-def clear_tab_complete_vocabulary():
-    # type: () -> None
+def clear_tab_complete_vocabulary() -> None:
     """
     Resets vocabulary used for tab completion. It's important to either use the cleanup argument in tab_complete,
     or call this function after setting a vocabulary. This will prevent irrelevant options displaying when the user

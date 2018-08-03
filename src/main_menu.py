@@ -129,6 +129,7 @@ class MainMenu:
             MenuOption('p', 'JiraProject Queries', self.go_to_projects_menu, pause=False),
             MenuOption.print_blank_line(),
             MenuOption('t', 'Run a Team-Based Report', self._run_team_report, pause=False),
+            MenuOption('u', 'Run an org-based Report', self._run_org_report, pause=False),
             MenuOption('e', 'View Escalations', self._jira_manager.display_escalations, pause=False),
             MenuOption.print_blank_line(),
             MenuOption('r', 'Generate a Pre-Determined Report', self.go_to_reports_menu, pause=False),
@@ -176,9 +177,11 @@ class MainMenu:
             MenuOption('l', 'List all defined Teams', self._team_manager.list_teams),
             MenuOption('a', 'Add a new team', self._add_team),
             MenuOption('e', 'Edit an existing team', self._edit_team),
-            MenuOption('r', 'Remove a team', self._remove_team),
+            MenuOption('r', 'Remove a team', self._team_manager.remove_team),
             MenuOption('x', 'Link a team member to two accounts across JiraConnections', self.add_linked_member),
             MenuOption('d', 'Delete a cross-Jira link', self._team_manager.remove_linked_member),
+            MenuOption('o', 'Add an organization', self._team_manager.add_organization),
+            MenuOption('p', 'Remove an organization', self._team_manager.remove_organization),
             MenuOption.print_blank_line(),
             MenuOption.return_to_previous_menu(self.go_to_main_menu)
         ]
@@ -359,9 +362,6 @@ class MainMenu:
     def _edit_team(self):
         self._team_manager.edit_team(self._jira_manager)
 
-    def _remove_team(self):
-        self._team_manager.remove_team()
-
     def _change_password(self):
         try_one = getpass('Enter new local Argus Password: ')
         try_two = getpass('Confirm password: ')
@@ -398,6 +398,9 @@ class MainMenu:
 
     def _run_team_report(self):
         self._team_manager.run_team_reports(self._jira_manager)
+
+    def _run_org_report(self):
+        self._team_manager.run_org_report(self._jira_manager)
 
     def add_linked_member(self):
         if self._jira_manager.jira_connection_count() <= 1:

@@ -90,6 +90,8 @@ class JiraUtils:
             NOTE: Valid formats: 'yyyy/MM/dd HH:mm', 'yyyy-MM-dd HH:mm', 'yyyy/MM/dd', 'yyyy-MM-dd', or a period format e.g. '-5d', '4w 2d'
             Most frequently expected use-case is a specific yyyy/MM/dd HH:mm to get all tickets since last update
         """
+        # TODO: Remove this before commit
+        return []
         update_text = '' if update_cutoff is None else ' AND updated > "{}"'.format(update_cutoff)
         jql = 'PROJECT = {}{}'.format(project_name, update_text)
         print('Getting issues for project using JQL: {}'.format(jql))

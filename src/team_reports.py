@@ -87,7 +87,7 @@ class ReportFilter:
 
     def column_headers(self):
         # 4 pad to cover #'s for detail breakdown
-        result = '      {:<{width}.{width}} '.format('Name', width=self.name_width)
+        result = '{:<{width}.{width}} '.format('Name', width=self.name_width)
         for column in self.columns:
             result += '{:<{width}.{width}}'.format(column, width=self.col_width)
         return result
@@ -112,7 +112,7 @@ class ReportFilter:
         return len(self.issues[issue_type])
 
     def print_all_counts(self, name: str) -> str:
-        result = '{:<{width}.{width}}'.format(name, width=self.name_width)
+        result = '{:<{width}.{width}} '.format(name, width=self.name_width)
         for column in self.columns:
             result += '{:<{width}}'.format(len(self.issues[column]), width=self.col_width)
         return result

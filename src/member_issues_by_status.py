@@ -58,7 +58,7 @@ class MemberIssuesByStatus:
     are cached in the object to denote the various JiraIssue ownership relationships this member has.
     """
 
-    def __init__(self, jira_user_name):
+    def __init__(self, jira_user_name: JiraUserName):
         # Use to identify the primary user name. Do not include in known names list so we don't duplicate serialization
         self.primary_name = jira_user_name
 

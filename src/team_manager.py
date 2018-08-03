@@ -16,7 +16,7 @@ import configparser
 import os
 import sys
 import traceback
-from typing import TYPE_CHECKING
+from typing import Dict, List, Optional
 
 from jira import JIRAError
 
@@ -30,9 +30,6 @@ from src.team_reports import (ReportCurrentLoad, ReportFilter, ReportFixVersion,
 from src.utils import (clear, conf_dir, get_input, is_yes, pause, pick_value,
                        print_separator, save_argus_config)
 
-if TYPE_CHECKING:
-    from typing import Dict, List, Optional
-
 
 class TeamManager:
 
@@ -41,8 +38,18 @@ class TeamManager:
     LinkedMember, and various functions to query out tickets on a per-team basis and generate
     reports for summation across issues
     """
+    reports = {
+        ReportType.MOMENTUM: ReportMomentum(),
+        ReportType.CURRENT_LOAD: ReportCurrentLoad(),
+        ReportType.TEST_LOAD: ReportTestLoad(),
+        ReportType.REVIEW_LOAD: ReportReviewLoad(),
+        ReportType.FIXVERSION: ReportFixVersion(),
+        ReportType.META: ReportMeta()
+    }
+
     def __init__(self):
         self._teams = {}
+        self._organizations = {}  # type: Dict[str, set[str]]
 
     def prompt_for_team_addition(self, jira_manager):
         name = get_input('Name this new team:', lowered=False)
@@ -53,9 +60,46 @@ class TeamManager:
         self._teams[name] = Team(name, jira_connection_name)
         self.edit_team(jira_manager, name)
 
-    def add_existing_team(self, new_team):
-        # type: (Team) -> None
+    def add_existing_team(self, new_team: Team) -> None:
         self._teams[new_team.name] = new_team
+
+    def add_organization(self) -> None:
+        while True:
+            if len(self._organizations.keys()) != 0:
+                print('Known organizations:')
+            for known_org in self._organizations.keys():
+                print('   {}'.format(known_org))
+            org_name = get_input('Enter a new org name, [q] to quit:', False)
+            if org_name == 'q':
+                break
+            new_org = set()
+            while True:
+                clear()
+                print('Org: {}'.format(org_name))
+                for team_name in new_org:
+                    print('   {}'.format(team_name))
+                choice = get_input('[a]dd a new team to this org, [q]uit')
+                if choice == 'q':
+                    break
+                elif choice == 'a':
+                    new_team = self.pick_team(list(new_org))
+                    if new_team is not None:
+                        new_org.add(new_team.name)
+                else:
+                    print('Bad choice. Try again.')
+                    pause()
+            if new_org is not None:
+                self._organizations[org_name] = new_org
+                self._save_config()
+                print('New org {} added.'.format(org_name))
+                break
+
+    def remove_organization(self) -> None:
+        selection = pick_value('Remove which organization?', list(self._organizations.keys()))
+        if selection is None:
+            return
+        del self._organizations[selection]
+        self._save_config()
 
     def list_teams(self):
         print_separator(40)
@@ -64,9 +108,12 @@ class TeamManager:
             print('{}'.format(team))
         print_separator(40)
 
-    def pick_team(self):
-        # type: () -> Optional[Team]
-        team_name = pick_value('Select a team', list(self._teams.keys()), True, 'Cancel')
+    def pick_team(self, skip_list=None) -> Optional[Team]:
+        if skip_list is None:
+            valid_names = list(self._teams.keys())
+        else:
+            valid_names = [x for x in self._teams.keys() if x not in skip_list]
+        team_name = pick_value('Select a team', valid_names, True, 'Cancel')
         if team_name is None:
             return None
         return self._teams[team_name]
@@ -74,8 +121,7 @@ class TeamManager:
     def get_team_by_name(self, team_name):
         return self._teams[team_name]
 
-    def edit_team(self, jira_manager, team_name=None):
-        # type: (JiraManager, str) -> None
+    def edit_team(self, jira_manager: JiraManager, team_name: str = None) -> None:
         if team_name is None:
             team_name = pick_value('Edit which team?', list(self._teams.keys()), True, 'Cancel')
             if team_name is None:
@@ -117,8 +163,7 @@ class TeamManager:
                 pause()
         self._save_config()
 
-    def remove_team(self):
-        # type: () -> Optional[str]
+    def remove_team(self) -> Optional[str]:
         """
         :return: Name of team that was removed, None if none.
         """
@@ -134,8 +179,7 @@ class TeamManager:
             return to_remove
         return None
 
-    def create_new_member_alias(self, jira_manager):
-        # type: (JiraManager) -> None
+    def create_new_member_alias(self, jira_manager: JiraManager) -> None:
         """
         This linkage is performed on the logical 'Team' level rather than per JiraConnection.
         """
@@ -174,8 +218,7 @@ class TeamManager:
         if changed:
             self._save_config()
 
-    def _pick_member_for_linkage_operation(self, action):
-        # type: (str) -> Optional[MemberIssuesByStatus]
+    def _pick_member_for_linkage_operation(self, action: str) -> Optional[MemberIssuesByStatus]:
         """
         Prompts for both team to remove from and then member. Used on both addition and deletion paths.
         """
@@ -200,6 +243,59 @@ class TeamManager:
         if target_member.remove_alias():
             self._save_config()
 
+    def run_org_report(self, jira_manager):
+        """
+        Sub-menu driven method to run a specific type of report across multiple teams within an organization
+        """
+        org_name = None
+
+        if len(self._organizations) == 0:
+            # We don't prompt for addition now since we'd have to pass in main menu context to do that from here.
+            print('No organizations found. Please use the Team Management menu to define a new organization before running a report.')
+            pause()
+            return
+
+        while True:
+            clear()
+            if org_name is None:
+                print_separator(40)
+                org_name = pick_value('Run reports against which organization?', list(self._organizations.keys()))
+                # None return from pick_team == cancel
+                if org_name is None:
+                    return
+                for team_name in sorted(self._organizations[org_name]):
+                    active_team = self._teams[team_name]
+                    print('Populating tickets for team: {}'.format(active_team.name))
+                    TeamManager.populate_owned_jira_issues(jira_manager, active_team.members)
+
+            print('---------------------')
+            print('-    Org Menu      -')
+            print('---------------------')
+            print('t: Change active org. Current: {}'.format(org_name))
+            self._print_report_menu()
+            print('q: Cancel')
+            print('---------------------')
+            choice = get_input(':')
+            if choice == 'q':
+                return
+            elif choice == 't':
+                org_name = None
+            try:
+                report_type = ReportType.from_int(int(choice))
+                if report_type == ReportType.UNKNOWN:
+                    print('Bad input: {}. Try again.'.format(choice))
+                    pause()
+                else:
+                    report_to_run = TeamManager.reports[report_type]
+                    if TeamManager.reports[report_type].needs_duration:
+                        report_to_run.since = time_utils.since_now(ReportFilter.get_since())
+                    self._run_org_report(org_name, report_to_run)
+                    pause()
+            except (ValueError, TypeError) as e:
+                print('Error on input: {}. Try again'.format(e))
+                traceback.print_exc()
+                pause()
+
     def run_team_reports(self, jira_manager):
         """
         Sub-menu driven method to run some specific reports of interest against teams. This will take into account
@@ -213,18 +309,10 @@ class TeamManager:
             pause()
             return
 
-        reports = {
-            ReportType.MOMENTUM: ReportMomentum(),
-            ReportType.CURRENT_LOAD: ReportCurrentLoad(),
-            ReportType.TEST_LOAD: ReportTestLoad(),
-            ReportType.REVIEW_LOAD: ReportReviewLoad(),
-            ReportType.FIXVERSION: ReportFixVersion(),
-            ReportType.META: ReportMeta()
-        }
-
         while True:
             clear()
             if selected_team is None:
+                print('No active team. Please select a team:')
                 selected_team = self.pick_team()
                 # None return from pick_team == cancel
                 if selected_team is None:
@@ -235,12 +323,7 @@ class TeamManager:
             print('-    Team Menu      -')
             print('---------------------')
             print('t: Change active root team. Current: {}'.format(selected_team.name))
-            print('{}: Run a momentum report: closed tickets, closed test tickets, closed reviews for a custom time frame'.format(ReportType.MOMENTUM))
-            print('{}: Team load report: assigned bugs, assigned tests, assigned features, assigned reviews, patch available reviews'.format(ReportType.CURRENT_LOAD))
-            print('{}: Test load report: snapshot of currently assigned tests and closed tests in a custom time frame'.format(ReportType.TEST_LOAD))
-            print('{}: Review load report: snapshot of currently assigned reviews, Patch Available reviews, and finished reviews in a custom time frame'.format(ReportType.REVIEW_LOAD))
-            print('{}: FixVersion report: show data for all tickets on a fixversion over time frame'.format(ReportType.FIXVERSION))
-            print('{}: Meta report: show data for meta workload for a team'.format(ReportType.META))
+            self._print_report_menu()
             print('q: Cancel')
             print('---------------------')
             choice = get_input(':')
@@ -254,15 +337,23 @@ class TeamManager:
                     print('Bad input: {}. Try again.'.format(choice))
                     pause()
                 else:
-                    TeamManager._run_report(jira_manager, selected_team, reports[report_type])
+                    TeamManager._run_report(jira_manager, selected_team, TeamManager.reports[report_type])
             except (ValueError, TypeError) as e:
                 print('Error on input: {}. Try again'.format(e))
                 traceback.print_exc()
                 pause()
 
     @staticmethod
-    def populate_owned_jira_issues(jira_manager, team_members):
-        # type: (JiraManager, List[MemberIssuesByStatus]) -> None
+    def _print_report_menu() -> None:
+        print('{}: Run a momentum report: closed tickets, closed test tickets, closed reviews for a custom time frame'.format(ReportType.MOMENTUM))
+        print('{}: Team load report: assigned bugs, assigned tests, assigned features, assigned reviews, patch available reviews'.format(ReportType.CURRENT_LOAD))
+        print('{}: Test load report: snapshot of currently assigned tests and closed tests in a custom time frame'.format(ReportType.TEST_LOAD))
+        print('{}: Review load report: snapshot of currently assigned reviews, Patch Available reviews, and finished reviews in a custom time frame'.format(ReportType.REVIEW_LOAD))
+        print('{}: FixVersion report: show data for all tickets on a fixversion over time frame'.format(ReportType.FIXVERSION))
+        print('{}: Meta report: show data for meta workload for a team'.format(ReportType.META))
+
+    @staticmethod
+    def populate_owned_jira_issues(jira_manager: JiraManager, team_members: List[MemberIssuesByStatus]) -> None:
         related_jira_connections = set()
         # clear out any cached data on this team and build a set of JiraConnections we want to add tickets from
         for member in team_members:
@@ -288,9 +379,29 @@ class TeamManager:
         for member in team_members:
             member.sort_tickets()
 
+    def _run_org_report(self, org_name: str, report_filter: ReportFilter) -> None:
+        # Print out a menu of the meta information for this report
+        print_separator(40)
+        report_filter.print_description()
+        print_separator(40)
+        print('Report for org: {}'.format(org_name))
+        print('[{}]'.format(report_filter.header))
+
+        for team_name in self._organizations[org_name]:
+            team = self._teams[team_name]
+            print('[Team: {}]'.format(team_name))
+            print(report_filter.column_headers())
+            sorted_member_issues = sorted(team.members, key=lambda s: s.primary_name.user_name)
+
+            for member_issues in sorted_member_issues:
+                report_filter.clear()
+                # We perform pre-processing and one-off prompting for time duration in .process call
+                report_filter.process_issues(member_issues)
+                print('{}'.format(report_filter.print_all_counts(member_issues.primary_name.user_name)))
+
     @staticmethod
     def _run_report(jira_manager: JiraManager, team: Team, report_filter: ReportFilter) -> None:
-        # We prompt for a new 'since' on each iteration of the loop
+        # We prompt for a new 'since' on each iteration of the loop in non-org reporting
         if report_filter.needs_duration:
             report_filter.since = time_utils.since_now(ReportFilter.get_since())
 
@@ -366,25 +477,33 @@ class TeamManager:
             config_parser.read(os.path.join(conf_dir, 'teams.cfg'))
 
             # Add teams
-            if not config_parser.has_section('manager'):
-                return result
-            team_roots = config_parser.get('manager', 'team_names').split(',')
-            for team_root in team_roots:
-                # Skip trailing ,
-                if team_root == '':
-                    continue
-                name, jira_connection_name = team_root.split(':')
-                result._teams[name] = Team(name, jira_connection_name)
+            if config_parser.has_section('manager'):
+                team_roots = config_parser.get('manager', 'team_names').split(',')
+                for team_root in team_roots:
+                    # Skip trailing ,
+                    if team_root == '':
+                        continue
+                    name, jira_connection_name = team_root.split(':')
+                    result._teams[name] = Team(name, jira_connection_name)
 
             # Add MemberIssuesByStatus
             for member_root_name in config_parser.sections():
-                if member_root_name == 'manager':
+                # TODO: Consider removing these two manualy bypasses. Kind of hacky to assume everything in config is member root.
+                if member_root_name == 'manager' or member_root_name == 'organizations':
                     continue
                 new_member = MemberIssuesByStatus.from_file(member_root_name, config_parser)
                 team = result.get_team_by_name(new_member.primary_team)
                 if team is None:
                     raise ValueError('Failed to find a constructed team with name: {}'.format(new_member.primary_team))
                 team.add_existing_member(new_member)
+
+            # Init Orgs
+            if config_parser.has_section('organizations'):
+                for org_name in config_parser.get('organizations', 'org_names').split(','):
+                    new_org = set()
+                    for team_name in config_parser.get('organizations', org_name).split(','):
+                        new_org.add(team_name)
+                    result._organizations[org_name] = new_org
 
             return result
         except (AttributeError, ValueError, IOError) as e:
@@ -408,6 +527,13 @@ class TeamManager:
         for team in list(self._teams.values()):
             for member in team.members:
                 member.save_config(config_parser)
+
+        # [organizations] [org_names=org_1, org_2, org_3]
+        # [organizations] [org=team_1, team_2, team_3]
+        config_parser.add_section('organizations')
+        config_parser.set('organizations', 'org_names', ','.join(list(self._organizations.keys())))
+        for org in self._organizations.keys():
+            config_parser.set('organizations', org, ','.join(list(self._organizations[org])))
 
         config_path = os.path.join(conf_dir, 'teams.cfg')
         save_argus_config(config_parser, config_path)
