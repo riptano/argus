@@ -190,6 +190,11 @@ class JiraIssue(dict):
         return self['priority']
 
     @property
+    def mid_low_prio(self) -> bool:
+        p = self.priority
+        return p != 'Critical' and p != 'High'
+
+    @property
     def status(self) -> Optional[str]:
         return self['status']
 
@@ -206,6 +211,14 @@ class JiraIssue(dict):
         if self.matches_label('test', False) or self.issuetype == 'Test':
             return True
         return False
+
+    @property
+    def is_task(self) -> bool:
+        return True if self.issuetype == 'sub-task' else False
+
+    @property
+    def not_test(self) -> bool:
+        return not self.is_test
 
     @property
     def updated(self) -> Optional[str]:

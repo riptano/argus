@@ -10,7 +10,7 @@ from src.display_filter import DisplayFilter
 from src.jira_filter import JiraFilter
 from src.jira_utils import JiraUtils
 from src.utils import (ConfigError, argus_debug, get_input, pick_value,
-                       print_separator, save_argus_config, jira_view_dir)
+                       print_separator, save_argus_config, jira_view_dir, pause)
 
 if TYPE_CHECKING:
     from typing import Dict, List
@@ -126,8 +126,7 @@ class JiraView:
 
         save_argus_config(config_parser, self._build_config(self.name))
 
-    def display_view(self, jira_manager):
-        # type: (JiraManager) -> None
+    def display_view(self, jira_manager: 'JiraManager') -> None:
         df = DisplayFilter.default()
 
         working_issues = list(self.get_issues().values())
@@ -152,6 +151,9 @@ class JiraView:
                     working_issues = new_issues
                 elif custom == 'c':
                     working_issues = list(self.get_issues().values())
+                elif len(issues) == 0:
+                    print('No matching jira issues found. Skipping attempt to open.')
+                    pause()
                 else:
                     try:
                         JiraUtils.open_issue_in_browser(
@@ -163,8 +165,7 @@ class JiraView:
                 traceback.print_exc()
                 return
 
-    def edit_view(self, team_manager, jira_manager):
-        # type: (TeamManager, JiraManager) -> None
+    def edit_view(self, team_manager: 'TeamManager', jira_manager: 'JiraManager') -> None:
         print('Current view contents: {}'.format(self))
 
         while True:

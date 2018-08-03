@@ -13,12 +13,13 @@
 # limitations under the License.
 
 import datetime
+import itertools
 
 from dateutil import parser
 
 from src.jira_issue import JiraIssue
 from src.member_issues_by_status import MemberIssuesByStatus
-from src.utils import get_input
+from src.utils import get_input, pause
 from typing import List
 
 
@@ -30,6 +31,7 @@ class ReportType:
     TEST_LOAD = 3
     REVIEW_LOAD = 4
     FIXVERSION = 5
+    META = 6
 
     @classmethod
     def from_int(cls, value):
@@ -44,6 +46,8 @@ class ReportType:
             return ReportType.REVIEW_LOAD
         elif value == 5:
             return ReportType.FIXVERSION
+        elif value == 6:
+            return ReportType.META
         else:
             return ReportType.UNKNOWN
 
@@ -54,7 +58,11 @@ class ReportFilter:
     Base report, not to be used directly
     """
     header = 'Base ReportFilter -> something is busted if you\'re seeing this...'
-    namelen = 30
+    name_width = 30
+    col_width = 20
+
+    # Based description, leaving blank
+    description = 'No detail provided for this report'
 
     def __init__(self):
         # We store issues in a manner reflecting of their final visualization. For example, if we want to see 'closed'
@@ -79,9 +87,9 @@ class ReportFilter:
 
     def column_headers(self):
         # 4 pad to cover #'s for detail breakdown
-        result = '      {:<30}'.format('Name')
+        result = '      {:<{width}.{width}} '.format('Name', width=self.name_width)
         for column in self.columns:
-            result += '{:<20}'.format(column)
+            result += '{:<{width}.{width}}'.format(column, width=self.col_width)
         return result
 
     def process_issues(self, member_issues: 'MemberIssuesByStatus') -> None:
@@ -92,7 +100,8 @@ class ReportFilter:
 
     def _add_matching_issues(self, column_name: str, jira_issues: List[JiraIssue]) -> None:
         """
-        Adds issues matching this report filters criteria to the specified column
+        Adds issues matching this report filters criteria to the specified column. Relies on self.matches to determine
+        which issues match what this report is looking for
         """
         matching_issues = [x for x in jira_issues if self.matches(x)]
         self.issues[column_name].extend(matching_issues)
@@ -103,10 +112,9 @@ class ReportFilter:
         return len(self.issues[issue_type])
 
     def print_all_counts(self, name: str) -> str:
-        # type: (str) -> str
-        result = '{:<30}'.format(name)
+        result = '{:<{width}.{width}}'.format(name, width=self.name_width)
         for column in self.columns:
-            result += '{:<20}'.format(len(self.issues[column]))
+            result += '{:<{width}}'.format(len(self.issues[column]), width=self.col_width)
         return result
 
     def get_issues(self, issue_type: str) -> List[JiraIssue]:
@@ -120,6 +128,9 @@ class ReportFilter:
 
     def set_header(self, new_header: str) -> None:
         self.header = new_header
+
+    def print_description(self) -> None:
+        print(self.description)
 
     @staticmethod
     def get_since():
@@ -201,20 +212,103 @@ class ReportCurrentLoad(ReportFilter):
 
     def __init__(self):
         ReportFilter.__init__(self)
-        self.columns = ['bug', 'test', 'feature', 'review', 'PA review']
-        self.issues = {'bug': [], 'test': [], 'feature': [], 'review': [], 'PA review': []}
+        self.columns = ['bug', 'test', 'feature', 'review', 'PA review', 'Total']
+        self.issues = {'bug': [], 'test': [], 'feature': [], 'review': [], 'PA review': [], 'Total': []}
 
-    def process_issues(self, member_issues):
-        # type: (MemberIssuesByStatus) -> None
+    def process_issues(self, member_issues: MemberIssuesByStatus) -> None:
         self._add_matching_issues('bug', [x for x in member_issues.assigned if 'Bug' == x.issuetype])
         self._add_matching_issues('test', [x for x in member_issues.assigned if x.is_test])
         self._add_matching_issues('feature', [x for x in member_issues.assigned if x.is_feature])
         self._add_matching_issues('review', [x for x in member_issues.reviewer if 'Patch Available' != x.status])
         self._add_matching_issues('PA review', [x for x in member_issues.reviewer if 'Patch Available' == x.status])
+        self._add_matching_issues('Total', [x for x in itertools.chain(member_issues.assigned, member_issues.reviewer)])
 
     def matches(self, jira_issue: JiraIssue) -> bool:
         # Want unresolved issues only for open report. Don't need to time bound
         return jira_issue.is_open
+
+
+class ReportMeta(ReportFilter):
+    """
+    GOAL: get a snapshot of both the total open workload for an engineer and the
+    total throughput by ticket count, split out by the priority of the tickets as
+    a proxy for size/intensity of the work. Want to be able to fight bias (both
+    positive and negative) about engineers and spot potential underperformers, or
+    engineers not "equally contributing" to collective team work (reviews, tests, etc)
+
+    Key: C=Critical, H=High, E=Else, X=Test, T=Total, O=Owned, R=Reviewer
+    [Date range: <X> to <Y>]
+    ---------------[Workload]---------------------------------- |-------------[Closed]--------------------------------- |
+    ----------  CO---CR---HO---HR---EO---ER---XO---XR---TO---TR |-CO---CR---HO---HR---EO---ER---XO---XR---TO---TR------ |
+    <name>      #    #    #    #    #    #    #    #    #    #    #    #    #    #    #    #    #    #    #    #
+
+    [w to sort by total owned, x to sort by total review open, y to sort by closed owned,
+    z to sort by closed reviewed, i to invert current sort category order, c to print csv,
+    d to change date range]
+
+    <name> should be first initial last name, truncated
+    """
+    header = 'Meta Workload Report'
+    col_width = 5
+    description = 'Key: C=Critical, H=High, E=Else, X=Test, T=Total, A=Assignee, R=Reviewer, prefix C=Closed'
+
+    def __init__(self):
+        ReportFilter.__init__(self)
+        self.columns = ['CA', 'CR', 'HA', 'HR', 'EA', 'ER', 'XA', 'XR', 'TA', 'TR', 'CCA', 'CCR', 'CHA', 'CHR', 'CEA', 'CER', 'CXA', 'CXR', 'CTA', 'CTR']
+        self.issues = {
+            'CA': [],
+            'CR': [],
+            'HA': [],
+            'HR': [],
+            'EA': [],
+            'ER': [],
+            'XA': [],
+            'XR': [],
+            'TA': [],
+            'TR': [],
+            'CCA': [],
+            'CCR': [],
+            'CHA': [],
+            'CHR': [],
+            'CEA': [],
+            'CER': [],
+            'CXA': [],
+            'CXR': [],
+            'CTA': [],
+            'CTR': []
+        }
+
+    def process_issues(self, member_issues: MemberIssuesByStatus) -> None:
+        # First half -> the open issues
+        self._add_matching_issues('CA', [x for x in member_issues.assigned if 'Critical' == x.priority and x.not_test])
+        self._add_matching_issues('CR', [x for x in member_issues.reviewer if 'Critical' == x.priority and x.not_test])
+        self._add_matching_issues('HA', [x for x in member_issues.assigned if 'High' == x.priority and x.not_test])
+        self._add_matching_issues('HR', [x for x in member_issues.reviewer if 'High' == x.priority and x.not_test])
+        self._add_matching_issues('EA', [x for x in member_issues.assigned if x.mid_low_prio and x.not_test])
+        self._add_matching_issues('ER', [x for x in member_issues.reviewer if x.mid_low_prio and x.not_test])
+        self._add_matching_issues('XA', [x for x in member_issues.assigned if x.is_test])
+        self._add_matching_issues('XR', [x for x in member_issues.reviewer if x.is_test])
+        self._add_matching_issues('TA', member_issues.assigned)
+        self._add_matching_issues('TR', member_issues.reviewer)
+
+        # Second half -> the closed issues
+        self._add_matching_issues('CCA', [x for x in member_issues.closed if 'Critical' == x.priority and x.not_test])
+        self._add_matching_issues('CCR', [x for x in member_issues.reviewed if 'Critical' == x.priority and x.not_test])
+        self._add_matching_issues('CHA', [x for x in member_issues.closed if 'High' == x.priority and x.not_test])
+        self._add_matching_issues('CHR', [x for x in member_issues.reviewed if 'High' == x.priority and x.not_test])
+        self._add_matching_issues('CEA', [x for x in member_issues.closed if x.mid_low_prio and x.not_test])
+        self._add_matching_issues('CER', [x for x in member_issues.reviewed if x.mid_low_prio and x.not_test])
+        self._add_matching_issues('CXA', [x for x in member_issues.closed if x.is_test])
+        self._add_matching_issues('CXR', [x for x in member_issues.reviewed if x.is_test])
+        self._add_matching_issues('CTA', [x for x in member_issues.closed if x.not_test])
+        self._add_matching_issues('CTR', [x for x in member_issues.reviewed if x.not_test])
+
+    def matches(self, jira_issue: JiraIssue) -> bool:
+        return self._matches_time(jira_issue)
+
+    @property
+    def needs_duration(self):
+        return True
 
 
 class ReportFixVersion(ReportFilter):

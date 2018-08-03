@@ -67,7 +67,6 @@ class MemberIssuesByStatus:
 
         # WARNING: These containers also need to be reflected in self.clear and self.sort_tickets
         self.assigned: List[JiraIssue] = []
-        self.assigned: List[JiraIssue] = []
         self.closed: List[JiraIssue] = []
         self.reviewer: List[JiraIssue] = []
         self.reviewed: List[JiraIssue] = []
@@ -138,8 +137,7 @@ class MemberIssuesByStatus:
     def closed_test_count(self):
         return len([x for x in self.closed if x.is_test])
 
-    def add_if_owns(self, jira_connection, jira_issue):
-        # type: (JiraConnection, JiraIssue) -> bool
+    def add_if_owns(self, jira_connection: JiraConnection, jira_issue: JiraIssue) -> bool:
         """
         Note: this can theoretically leave duplicate JiraIssues in various lists
         Definition of "owns" in this context is: is assignee or reviewer of project

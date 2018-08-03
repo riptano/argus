@@ -25,7 +25,7 @@ from src.jira_manager import JiraManager
 from src.jira_utils import JiraUtils
 from src.member_issues_by_status import JiraUserName, MemberIssuesByStatus
 from src.team import Team
-from src.team_reports import (ReportCurrentLoad, ReportFilter, ReportFixVersion, ReportMomentum,
+from src.team_reports import (ReportCurrentLoad, ReportFilter, ReportFixVersion, ReportMeta, ReportMomentum,
                               ReportReviewLoad, ReportTestLoad, ReportType)
 from src.utils import (clear, conf_dir, get_input, is_yes, pause, pick_value,
                        print_separator, save_argus_config)
@@ -218,7 +218,8 @@ class TeamManager:
             ReportType.CURRENT_LOAD: ReportCurrentLoad(),
             ReportType.TEST_LOAD: ReportTestLoad(),
             ReportType.REVIEW_LOAD: ReportReviewLoad(),
-            ReportType.FIXVERSION: ReportFixVersion()
+            ReportType.FIXVERSION: ReportFixVersion(),
+            ReportType.META: ReportMeta()
         }
 
         while True:
@@ -239,6 +240,7 @@ class TeamManager:
             print('{}: Test load report: snapshot of currently assigned tests and closed tests in a custom time frame'.format(ReportType.TEST_LOAD))
             print('{}: Review load report: snapshot of currently assigned reviews, Patch Available reviews, and finished reviews in a custom time frame'.format(ReportType.REVIEW_LOAD))
             print('{}: FixVersion report: show data for all tickets on a fixversion over time frame'.format(ReportType.FIXVERSION))
+            print('{}: Meta report: show data for meta workload for a team'.format(ReportType.META))
             print('q: Cancel')
             print('---------------------')
             choice = get_input(':')
@@ -300,6 +302,8 @@ class TeamManager:
             while True:
                 # Print out a menu of the meta information for each team member
                 print_separator(40)
+                report_filter.print_description()
+                print_separator(40)
                 print('[{}]'.format(report_filter.header))
                 print(report_filter.column_headers())
 
@@ -329,6 +333,10 @@ class TeamManager:
                     displayed_issues = full_member_issues.display_member_issues(jira_manager, report_filter)
 
                     while True:
+                        if len(displayed_issues) == 0:
+                            print('No issues found matching category.')
+                            pause()
+                            break
                         cmd = get_input('[#] Integer value to open JIRA issue in browser. [q] to return to report results:')
                         if cmd == 'q':
                             break

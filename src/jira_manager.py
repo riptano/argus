@@ -404,15 +404,8 @@ class JiraManager:
         """
         Used during development to bypass complex menu operations and try out a single new operation outside unit testing
         """
-        conn = self._jira_connections['ds']
-        ji = JiraUtils.get_single_issue(conn, 'DB-1193')
-        print('Printing non-custom fields from retrieved and constructed JiraIssue')
-        keys = ji.keys()
-        for k in sorted(keys):
-            if 'custom' in k:
-                continue
-            print('   {}:{},'.format(k, ji[k]))
-        print('And scene.')
+        print('TEST: [{:{width}.{width}}]'.format('I am testing a 5.5 thing', width=5))
+        pause()
 
     def search_projects(self):
         """
