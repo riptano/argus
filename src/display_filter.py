@@ -17,6 +17,7 @@ import pydoc
 from typing import TYPE_CHECKING, Dict, List, Optional, Set
 
 from src import utils
+from src.jira_dependency import JiraDependency
 from src.jira_issue import JiraIssue
 from src.jira_utils import JiraUtils
 
@@ -94,7 +95,7 @@ class DisplayFilter:
         df.use_pager = False
         return df
 
-    def include_column(self, column_name: str, pretty_name: str, width: int, index: int=-1) -> None:
+    def include_column(self, column_name: str, pretty_name: str, width: int, index: int = -1) -> None:
         """
         :param index: Index to append column to, -1 (default) to append at end of current list
         """
@@ -133,7 +134,7 @@ class DisplayFilter:
     def display_and_return_sorted_issues(self,
                                          jira_manager: 'JiraManager',
                                          issues: List[JiraIssue],
-                                         start_idx: int=1,
+                                         start_idx: int = 1,
                                          filters: Optional[Dict['Column', str]] = None,
                                          force_show_dependencies: bool = False,
                                          ) -> List[JiraIssue]:
@@ -148,7 +149,7 @@ class DisplayFilter:
 
         # add padding to account for numbered tickets
         if filters is None:
-            filters = {}  # type: Dict[Column, str]
+            filters = {}
         result = self._construct_header()
 
         filtered_count = 0
@@ -157,7 +158,7 @@ class DisplayFilter:
             # We reset our circular dependency sentinel for each issue so as not to exclude dependencies for already
             # viewed tickets while still preventing meaningless duplication on a chain.
             DisplayFilter._seen_keys = set()
-            result += self._format_jira_issue(jira_manager, issue, filters, displayed_issues, None, force_show_dependencies)
+            result += self._format_jira_issue(jira_manager, issue, filters, displayed_issues, None, force_show_dependencies)  # type: ignore
 
         if self.use_pager:
             pydoc.pager(result)
@@ -170,10 +171,10 @@ class DisplayFilter:
 
     def _format_jira_issue(self,
                            jira_manager: 'JiraManager',
-                           issue: 'JiraIssue',
+                           issue: JiraIssue,
                            filters: Dict['Column', str],
-                           displayed_issues: List['JiraIssue'],
-                           dependency: Optional['JiraDependency'] = None,
+                           displayed_issues: List[JiraIssue],
+                           dependency: Optional[JiraDependency] = None,
                            force_show_dependencies: bool = False
                            ) -> str:
         """
@@ -187,7 +188,7 @@ class DisplayFilter:
         if self._current_depth > self._max_depth:
             return ''
 
-        result = self._build_issue_row(issue, filters, jira_manager, dependency)
+        result = self._build_issue_row(jira_manager, issue, filters, dependency)
         DisplayFilter._seen_keys.add(issue.issue_key)
 
         # if we're filtered out on this row, we move on
@@ -210,9 +211,9 @@ class DisplayFilter:
         return result
 
     def _build_issue_row(self,
+                         jira_manager: 'JiraManager',
                          issue: 'JiraIssue',
                          filters: Dict['Column', str],
-                         jira_manager: 'JiraManager',
                          dependency: Optional['JiraDependency'] = None
                          ) -> str:
         """
@@ -241,7 +242,7 @@ class DisplayFilter:
                 # On non-matches, we don't return this row at all
                 if val is None and column.name in filters:
                     return ''
-                elif column in filters and filters[column] not in val:
+                elif column in filters and val is not None and filters[column] not in val:
                     return ''
 
             val = '' if val is None else val

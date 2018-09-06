@@ -19,8 +19,8 @@ from dateutil import parser
 
 from src.jira_issue import JiraIssue
 from src.member_issues_by_status import MemberIssuesByStatus
-from src.utils import get_input, pause
-from typing import List
+from src.utils import get_input
+from typing import Dict, List, Optional, Set
 
 
 class ReportType:
@@ -34,8 +34,7 @@ class ReportType:
     META = 6
 
     @classmethod
-    def from_int(cls, value):
-        # type: (int) -> int
+    def from_int(cls, value: int) -> int:
         if value == 1:
             return ReportType.MOMENTUM
         elif value == 2:
@@ -64,35 +63,34 @@ class ReportFilter:
     # Based description, leaving blank
     description = 'No detail provided for this report'
 
-    def __init__(self):
+    def __init__(self) -> None:
         # We store issues in a manner reflecting of their final visualization. For example, if we want to see 'closed'
         # tickets, we have self.columns['Closed'] defined and self.issues['Closed'] defined. This allows us to arbitrarily
         # define groupings and customize only their logic on child-classes of ReportFilter.
-        self.columns = []
+        self.columns = []  # type: List[str]
 
-        # Dict[str:List[JiraIssue]]
-        self.issues = {}
+        self.issues = {}  # type: Dict[str, List[JiraIssue]]
 
-        # set(str) -> JiraIssue keys, used to determine if report contains issue in question
-        self.known_issues = set()
+        # JiraIssue keys, used to determine if report contains issue in question
+        self.known_issues = set()  # type: Set[str]
 
         # Many reports are time-bound, so we store this here for convenience rather than replicating it in each child class
         # This should be stored as a datetime object
-        self.since = None
+        self.since = None  # type: Optional[datetime.datetime]
 
-    def clear(self):
+    def clear(self) -> None:
         for column in self.columns:
             self.issues[column] = []
         self.known_issues = set()
 
-    def column_headers(self):
+    def column_headers(self) -> str:
         # 4 pad to cover #'s for detail breakdown
         result = '{:<{width}.{width}} '.format('Name', width=self.name_width)
         for column in self.columns:
             result += '{:<{width}.{width}}'.format(column, width=self.col_width)
         return result
 
-    def process_issues(self, member_issues: 'MemberIssuesByStatus') -> None:
+    def process_issues(self, member_issues: MemberIssuesByStatus) -> None:
         raise NotImplementedError()
 
     def matches(self, jira_issue: JiraIssue) -> bool:
@@ -133,7 +131,7 @@ class ReportFilter:
         print(self.description)
 
     @staticmethod
-    def get_since():
+    def get_since() -> str:
         return get_input('Since what date? (-2m or -1y or -5w or -2d, etc)')
 
     @property
@@ -167,7 +165,7 @@ class ReportFilter:
         issue_time = parser.parse(jira_issue.resolved)
         return issue_time >= self.since
 
-    def print_all_keys(self):
+    def print_all_keys(self) -> None:
         print('Printing all keys for report: {}. Total count: {}'.format(self.header, len(self.issues)))
         for issue_key in self.issues:
             print('   Key: {}'.format(issue_key))
@@ -180,7 +178,7 @@ class ReportMomentum(ReportFilter):
     """
     header = 'Closed tickets'
 
-    def __init__(self):
+    def __init__(self) -> None:
         ReportFilter.__init__(self)
         self.columns = ['Closed non-test', 'Reviewed', 'Closed Test']
         self.issues = {'Closed non-test': [], 'Reviewed': [], 'Closed Test': []}
@@ -199,7 +197,7 @@ class ReportMomentum(ReportFilter):
         return self._matches_time(jira_issue)
 
     @property
-    def needs_duration(self):
+    def needs_duration(self) -> bool:
         return True
 
 
@@ -210,7 +208,7 @@ class ReportCurrentLoad(ReportFilter):
     """
     header = 'Current work load'
 
-    def __init__(self):
+    def __init__(self) -> None:
         ReportFilter.__init__(self)
         self.columns = ['bug', 'test', 'feature', 'review', 'PA review', 'Total']
         self.issues = {'bug': [], 'test': [], 'feature': [], 'review': [], 'PA review': [], 'Total': []}
@@ -252,7 +250,7 @@ class ReportMeta(ReportFilter):
     col_width = 5
     description = 'Key: C=Critical, H=High, E=Else, X=Test, T=Total, A=Assignee, R=Reviewer, prefix C=Closed'
 
-    def __init__(self):
+    def __init__(self) -> None:
         ReportFilter.__init__(self)
         self.columns = ['CA', 'CR', 'HA', 'HR', 'EA', 'ER', 'XA', 'XR', 'TA', 'TR', 'CCA', 'CCR', 'CHA', 'CHR', 'CEA', 'CER', 'CXA', 'CXR', 'CTA', 'CTR']
         self.issues = {
@@ -320,11 +318,11 @@ class ReportFixVersion(ReportFilter):
     """
     header = 'FixVersion Momentum Report'
 
-    def __init__(self):
+    def __init__(self) -> None:
         ReportFilter.__init__(self)
         self.columns = ['Assigned', 'Closed non-test', 'Reviewed', 'Closed Test', 'Total']
         self.issues = {'Assigned': [], 'Closed non-test': [], 'Reviewed': [], 'Closed Test': [], 'Total': []}
-        self._fix_version = None
+        self._fix_version = None  # type: Optional[str]
 
     def process_issues(self, member_issues: MemberIssuesByStatus) -> None:
         assert member_issues is not None, 'process_issues call on a null MemberIssuesByStatus object.'
@@ -353,7 +351,7 @@ class ReportFixVersion(ReportFilter):
             raise Exception('Must input non-empty value for fixversion')
 
     @property
-    def needs_duration(self):
+    def needs_duration(self) -> bool:
         return True
 
 
@@ -364,7 +362,7 @@ class ReportTestLoad(ReportFilter):
     """
     header = 'Test Load'
 
-    def __init__(self):
+    def __init__(self) -> None:
         ReportFilter.__init__(self)
         self.columns = ['assigned', 'closed']
         self.issues = {'assigned': [], 'closed': []}
@@ -380,7 +378,7 @@ class ReportTestLoad(ReportFilter):
         return jira_issue.is_open or self._matches_time(jira_issue)
 
     @property
-    def needs_duration(self):
+    def needs_duration(self) -> bool:
         return True
 
 
@@ -391,22 +389,20 @@ class ReportReviewLoad(ReportFilter):
     """
     header = 'Review Load'
 
-    def __init__(self):
+    def __init__(self) -> None:
         ReportFilter.__init__(self)
         self.columns = ['reviewer', 'PA reviewer', 'reviewed']
         self.issues = {'reviewer': [], 'PA reviewer': [], 'reviewed': []}
 
-    def process_issues(self, member_issues):
-        # type: (MemberIssuesByStatus) -> None
+    def process_issues(self, member_issues: MemberIssuesByStatus) -> None:
         self._add_matching_issues('reviewer', [x for x in member_issues.reviewer if x.status != 'Patch Available'])
         self._add_matching_issues('PA reviewer', [x for x in member_issues.reviewer if x.status == 'Patch Available'])
         self._add_matching_issues('reviewed', member_issues.reviewed)
 
-    def matches(self, jira_issue):
-        # type: (JiraIssue) -> bool
+    def matches(self, jira_issue: JiraIssue) -> bool:
         # Unresolved or within recency time frame
         return self._matches_time(jira_issue)
 
     @property
-    def needs_duration(self):
+    def needs_duration(self) -> bool:
         return True

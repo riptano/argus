@@ -11,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from typing import TYPE_CHECKING, List, Optional
+from typing import List, Optional, Set, TYPE_CHECKING
 
 from src.utils import print_separator
 
@@ -26,7 +25,7 @@ class JiraDependency:
     """
 
     # Track dependencies we run across in tickets that are unknown in order to later prompt to add them to conf
-    unknown_dependencies = set()
+    unknown_dependencies = set()  # type: Set[str]
 
     dep_map = {
         'Automated By:inward': 'automates',
@@ -114,11 +113,11 @@ class JiraDependency:
         return JiraDependency.dep_map[key]
 
     @property
-    def target_issue_key(self):
+    def target_issue_key(self) -> str:
         try:
             assert self.target is not None, 'Attempted to access target_issue_key in JiraDependency but target is None'
             assert self.target.issue_key is not None, 'Have target with no issue_key. What we know of target: {}'.format(self.target)
-        except AttributeError as ae:
+        except AttributeError:
             print('Attempted to access a contained JiraIssue as target in JiraDependency missing an issue_key. What we know of target: {}'.format(self.target))
             exit(-1)
         return self.target.issue_key
@@ -146,11 +145,13 @@ class JiraDependency:
         fields = JiraDependency.validate_input_data(raw_data)
         return fields[0]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return 'IssueKey: {}. Type: {}. Direction: {}'.format(self.target_issue_key, self.type, self.direction)
 
-    def __eq__(self, other):
-        return self.target.issue_key == other.target.issue_key and self.type == other.type and self.direction == other.direction
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, JiraDependency):
+            return self.target.issue_key == other.target.issue_key and self.type == other.type and self.direction == other.direction
+        return False
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.target_issue_key, self.type, self.direction))

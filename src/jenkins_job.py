@@ -19,20 +19,16 @@ This module does not interact with the Jenkins server at all. All data needs to 
 from the server prior to creating a new JenkinsJob object.
 """
 import pickle
-from typing import TYPE_CHECKING
+from typing import Dict, List, Tuple, TYPE_CHECKING
 
+from src.jenkins_interface import JenkinsBuild
 from src.utils import get_build_options
-
-if TYPE_CHECKING:
-    from typing import Dict, List, Tuple
-    from src.jenkins_interface import JenkinsBuild
 
 
 class JenkinsJob:
     """Represents a single Jenkins job with recent build and test failure data."""
 
-    def __init__(self, name, jenkins_builds):
-        # type: (str, List[JenkinsBuild]) -> None
+    def __init__(self, name: str, jenkins_builds: List[JenkinsBuild]) -> None:
         """
         Create a Jenkins job object from data pulled from a Jenkins job_instance.
 
@@ -108,8 +104,7 @@ class JenkinsJob:
                             num_recent_failures, self.recent_builds_checked))
 
     @staticmethod
-    def _get_build_failures(jenkins_builds):
-        # type: (List[JenkinsBuild]) -> Tuple[int, Dict[str, int]]
+    def _get_build_failures(jenkins_builds: List[JenkinsBuild]) -> Tuple[int, Dict[str, int]]:
         """
         Loop through a list of Jenkins builds to determine the number of build and test failures.
 
@@ -131,8 +126,7 @@ class JenkinsJob:
         return failed_builds, failed_tests
 
     @staticmethod
-    def _get_job_health(failed_builds, builds_checked):
-        # type: (int, int) -> str
+    def _get_job_health(failed_builds: int, builds_checked: int) -> str:
         """
         Determine the health of a job based on the number of recently failed builds.
 
@@ -178,8 +172,7 @@ class JenkinsJob:
 class JenkinsTest:
     """Container class for a Jenkins test and its failure history."""
 
-    def __init__(self, name, num_failures, builds_checked, num_recent_failures, recent_builds_checked):
-        # type: (str, int, int, int, int) -> None
+    def __init__(self, name: str, num_failures: int, builds_checked: int, num_recent_failures: int, recent_builds_checked: int) -> None:
         """
         Create a JenkinsTest instance.
 

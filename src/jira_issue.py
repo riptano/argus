@@ -26,6 +26,7 @@ from src.utils import ConfigError
 
 if TYPE_CHECKING:
     from src.jira_connection import JiraConnection
+    from src.jira_manager import JiraManager
     from src.jira_project import JiraProject
 
 
@@ -51,7 +52,7 @@ class JiraIssue(dict):
             self.jira_connection_name = jira_connection.connection_name
         else:
             self.jira_connection_name = 'None'
-        self.issue_key = issue.key
+        self.issue_key = issue.key  # type: str
         self.dependencies = set()  # type: Set[JiraDependency]
         self.version = 1
 
@@ -79,7 +80,7 @@ class JiraIssue(dict):
                     dict.__setitem__(self, 'issuelinks', result)
 
                 elif k == 'fixVersions' and len(v) > 0:
-                    result = []
+                    fa = []
 
                     # Some backwards compat logic necessary here based on serialized version on disk.
                     # This can be stored as a jira.resources.Version object, a raw string comma delim with name=, or a
@@ -87,21 +88,21 @@ class JiraIssue(dict):
                     for version in v:
                         # If serialized in a jira.resources.Version object, we only care about fixver string
                         if type(version) == Version:
-                            result.append(str(version.name))
+                            fa.append(str(version.name))
                         # Otherwise we convert from an interim raw string format to a parsed array of version strings:
                         #     [<JIRA Version: name='1.1.2', id='12321445'>, <JIRA Version: name='1.2.0 beta 1', id='12319262'>]
                         elif isinstance(version, str) and 'name' in version:
-                            result_match = re.search('name=\'([0-9A-Za-z_\.]+)\'', version)
+                            result_match = re.search('name=\'([0-9A-Za-z_.]+)\'', version)
                             if not result_match:
                                 raise ConfigError('WARNING! Discovered fixVersions string with unexpected format. Expected "name=([value])" and got: {}.'.format(version))
-                            result.append(result_match.group(1))
+                            fa.append(result_match.group(1))
                         # If it's a list, we assume it's the list of the versions we're interested in. May need to revisit
                         # this assumption later.
                         elif isinstance(version, list):
-                            result.append(version)
+                            fa.extend(version)
                         else:
                             raise ConfigError('Received unexpected type in fixVersion: {} for ticket: {}'.format(type(version), self.issue_key))
-                    self['fixVersions'] = ','.join(result)
+                    self['fixVersions'] = ','.join(fa)
                 else:
                     dict.__setitem__(self, str(k), str(v))
 
@@ -157,11 +158,11 @@ class JiraIssue(dict):
         return self['resolution'] is None or self['resolution'] == 'None' or self['resolution'] == 'Unresolved'
 
     @property
-    def is_closed(self):
+    def is_closed(self) -> bool:
         return not self.is_open
 
     @property
-    def project_name(self):
+    def project_name(self) -> str:
         return self.issue_key.split('-')[0]
 
     @property
@@ -262,7 +263,7 @@ class JiraIssue(dict):
         """
         return label in self.labels
 
-    def matches_label(self, to_match: str, case_sensitive: bool=True) -> bool:
+    def matches_label(self, to_match: str, case_sensitive: bool = True) -> bool:
         """
         Regex match for inclusion of part of a string in labels.
         """
@@ -304,7 +305,7 @@ class JiraIssue(dict):
 
         return match + matchu
 
-    def resolve_dependencies(self, jira_manager):
+    def resolve_dependencies(self, jira_manager: 'JiraManager') -> None:
         """
         issuelinks field is stored as a string with format ['issue1','issue2','issue3']. We do this for ser/deser cleanliness
         and then materialize those links in memory as references to other JiraIssues after all cached projects are loaded
@@ -315,7 +316,7 @@ class JiraIssue(dict):
             self.dependencies = set()  # type: Set[JiraDependency]
 
         if not hasattr(self, 'issuelinks'):
-            self['issuelinks'] = set()  # type: Set[str]
+            self['issuelinks'] = set()
         elif len(self['issuelinks']) != 0:
             dep_array = self['issuelinks'].split(',')
             for dep_str in dep_array:
@@ -332,14 +333,14 @@ class JiraIssue(dict):
 
                 self.dependencies.add(dependency)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         """
         Hash on issue_key. This will need to be revisited if we ever allow duplicate JiraProject names across different
         JiraConnections
         """
         return hash(self.issue_key)
 
-    def __str__(self):
+    def __str__(self) -> str:
         result = 'key:{},'.format(self.issue_key)
         result += os.linesep + '   jira_connection_name:{}'.format(self.jira_connection_name)
         result += os.linesep + '   [FIELDS]'
@@ -347,14 +348,14 @@ class JiraIssue(dict):
             result += os.linesep + '   {}:{},'.format(k, v)
         return result
 
-    def serialize(self, file_handle):
+    def serialize(self, file_handle) -> None:
         # Do not save dummy placeholders to disk
         if not self.is_cached_offline:
             return
         pickle.dump(self, file_handle)
 
     @staticmethod
-    def deserialize(file_handle):
+    def deserialize(file_handle) -> 'JiraIssue':
         result = pickle.load(file_handle)
         # Initial Non-versioned serialization on disk to versioned conversion
         if not hasattr(result, 'version'):

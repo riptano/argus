@@ -11,18 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import os
 import sys
 from subprocess import Popen
 from typing import Dict, List, Optional
 from typing import TYPE_CHECKING
 
+from src import utils
 from src.jira_issue import JiraIssue
 from src.utils import browser, ConfigError
 
 if TYPE_CHECKING:
     from src.jira_connection import JiraConnection
     from src.jira_manager import JiraManager
+    from src.jira_project import JiraProject
 
 
 class JiraUtils:
@@ -70,7 +72,7 @@ class JiraUtils:
         return results
 
     @staticmethod
-    def get_single_issue(jira_connection: 'JiraConnection', issue_key: str) -> JiraIssue:
+    def get_single_issue(jira_connection: 'JiraConnection', issue_key: str) -> Optional[JiraIssue]:
         """
         Queries out a single JiraIssue. Used for testing
         """
@@ -78,12 +80,16 @@ class JiraUtils:
         print('Getting issue with JQL: {}'.format(jql))
         queried = jira_connection.search_issues(jql, startAt=0)
         assert len(queried) == 1, 'Expected 1 result for issuekey {}. Got {}'.format(issue_key, len(queried))
+        ji = None
         for issue in queried:
             ji = JiraIssue(jira_connection, issue)
-            return ji
+        return ji
 
     @staticmethod
-    def get_issues_for_project(jira_connection: 'JiraConnection', project_name: str, update_cutoff: Optional[str]=None) -> List['JiraIssue']:
+    def get_issues_for_project(jira_connection: 'JiraConnection',
+                               project_name: str,
+                               update_cutoff: Optional[str] = None
+                               ) -> List['JiraIssue']:
         """
         Queries out all results for a given project on the provided JiraConnection after a specified update time.
         :param update_cutoff: str datetime in valid JIRA timestamp format.
@@ -113,8 +119,7 @@ class JiraUtils:
         return results
 
     @classmethod
-    def retrieve_field_value(cls, jira_manager, issue, field):
-        # type: (JiraManager, JiraIssue, str) -> str
+    def retrieve_field_value(cls, jira_manager: 'JiraManager', issue: JiraIssue, field: str) -> str:
         if field not in issue:
             return ''
         elif field in issue:
@@ -130,8 +135,7 @@ class JiraUtils:
         raise AssertionError('Got a JiraIssue with no owning JiraProject. Issue: {}, JiraConnection name: {}'.format(issue, issue.jira_connection_name))
 
     @staticmethod
-    def sort_jira_issues(jira_issues):
-        # type: (List[JiraIssue]) -> List[JiraIssue]
+    def sort_jira_issues(jira_issues: List[JiraIssue]) -> List[JiraIssue]:
         # 2 stage sort. First by project name, then by issue key
         jira_issues.sort(key=lambda x: (x.issue_key.split('-')[0], int(x.issue_key.split('-')[1])))
         return jira_issues
@@ -143,13 +147,14 @@ class JiraUtils:
         data parsing (which I think we should), we'll only need 1 and it's not worth thinking about the abstraction
         to allow for parsing a key from different sources
         """
+        # TODO: Remove this now that we're 100% offline
         # dict of project to issues
-        results = {}
+        results = {}  # type: Dict[str, List[JiraIssue]]
         for i in issues:
-            project = i.issue_key.split('-')[0]
-            if project not in results:
-                results[project] = []
-            results[project].append(i)
+            project_name = i.issue_key.split('-')[0]
+            if project_name not in results:
+                results[project_name] = []
+            results[project_name].append(i)
 
         # Now, we simply sort each sub-array based on integer repr. of keys
         for p in results:
@@ -162,13 +167,21 @@ class JiraUtils:
         return [item for sublist in final for item in sublist]
 
     @staticmethod
-    def open_issue_in_browser(base_url, issue_key):
+    def open_issue_in_browser(base_url: str, issue_key: str) -> None:
         issue_url = '{}/browse/{}'.format(base_url.rstrip('/'), issue_key)
         Popen([browser(), issue_url])
         print('Opened {}. Press enter to continue.'.format(issue_url))
 
     @classmethod
-    def get_cached_jira(cls, key):
+    def get_cached_jira(cls, key: str) -> Optional[JiraIssue]:
         if key not in cls._cached_jira_issues:
             return None
         return cls._cached_jira_issues[key]
+
+    @staticmethod
+    def save_argus_data(items: List[JiraIssue], file_name: str) -> None:
+        if utils.unit_test:
+            file_name = os.path.join('tests', file_name)
+        with open(file_name, 'wb') as cf:
+            for item in items:
+                item.serialize(cf)

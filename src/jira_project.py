@@ -15,16 +15,17 @@
 import configparser
 import os
 import traceback
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 from src import utils
-from src.jira_utils import JiraUtils
 from src.jira_issue import JiraIssue
+from src.jira_utils import JiraUtils
 from src.utils import (ConfigError, argus_debug, jira_data_dir,
-                       save_argus_config, save_argus_data, jira_project_dir)
+                       save_argus_config, jira_project_dir)
 
 if TYPE_CHECKING:
     from src.jira_manager import JiraManager
+    from src.jira_connection import JiraConnection
     from typing import Dict, Optional, List
 
 
@@ -40,7 +41,7 @@ class JiraProject:
                  url,  # type: str
                  custom_fields=None,  # type: Optional[Dict[str, str]]
                  issues=None,  # type: Optional[Dict[str, JiraIssue]]
-                 updated='1970/01/01 00:00'  # type: Optional[str]
+                 updated='1970/01/01 00:00'  # type: str
                  ) -> None:
         """
         :param url: str, used to map projects to JiraConnections since we serialize separately on disk. We pass this separately
@@ -50,7 +51,7 @@ class JiraProject:
         """
         if custom_fields is None:
             custom_fields = {}
-        self.jira_connection = jira_connection
+        self.jira_connection = jira_connection  # type: Optional['JiraConnection']
         self.project_name = project_name
         self._custom_fields = custom_fields
         if url is not None:
@@ -63,26 +64,28 @@ class JiraProject:
 
         # map of issue key to JiraIssue
         if issues is None:
-            issues = {}  # type: Dict[str, JiraIssue]
+            issues = {}
         self.jira_issues = issues  # type: Dict[str, JiraIssue]
 
         # Set our max timestamp based on issues in this object cache
         for jira_issue in list(self.jira_issues.values()):
             try:
-                clean_ts = JiraProject.clean_ts(jira_issue.updated)
-                if clean_ts > self.updated:
-                    self.updated = clean_ts
-            except KeyError as ke:
+                if jira_issue.updated is not None:
+                    clean_ts = JiraProject.clean_ts(jira_issue.updated)
+                    if self.updated is None or clean_ts > self.updated:
+                        self.updated = clean_ts
+            except KeyError:
                 print('Error pulling updated ts from JiraIssue with key: {}. Skipping.'.format(jira_issue.issue_key))
 
-        jira_connection.add_and_link_jira_project(self)
+        if jira_connection is not None:
+            jira_connection.add_and_link_jira_project(self)
         self.add_field_translations_from_file()
 
     @property
-    def url(self):
+    def url(self) -> str:
         return self._url
 
-    def add_field_translations_from_file(self):
+    def add_field_translations_from_file(self) -> None:
         """
         Pulls custom translations from conf/custom_params.cfg and initializes this JiraProject with them if they are
         not otherwise defined
@@ -130,7 +133,7 @@ class JiraProject:
         return '{}:{}'.format(sa[0], sa[1]).replace('T', ' ')
 
     @classmethod
-    def from_file(cls, file_name: str, jira_manager: 'JiraManager') -> 'JiraProject':
+    def from_file(cls, file_name: str, jira_manager: 'JiraManager') -> Optional['JiraProject']:
         """
         Associates JiraConnection with JiraProject on creation. Adds JiraProject to JiraConnection internal
         project collection.
@@ -183,17 +186,19 @@ class JiraProject:
             print('Failed to load cached data for project/connection from config file: {}'.format(file_name))
             traceback.print_exc()
             return None
+        issue_count = len(new_jira_project.jira_issues.keys()) if new_jira_project.jira_issues is not None else 0
         print('Loaded project {} with {} issues cached. Last updated: {}'.format(new_jira_project.project_name,
-                                                                                 len(new_jira_project.jira_issues),
+                                                                                 issue_count,
                                                                                  new_jira_project.updated))
         new_jira_project.save_config()
         return new_jira_project
 
-    def save_config(self):
+    def save_config(self) -> None:
         # .cfg file
         config_parser = configparser.RawConfigParser()
         config_parser.add_section('Config')
-        config_parser.set('Config', 'connection_name', self.jira_connection.connection_name)
+        if self.jira_connection is not None:
+            config_parser.set('Config', 'connection_name', self.jira_connection.connection_name)
         config_parser.set('Config', 'project_name', self.project_name)
         config_parser.set('Config', 'updated', self.updated)
         config_parser.set('Config', 'url', self._url)
@@ -205,10 +210,10 @@ class JiraProject:
 
         # Protect against saving during init wiping out the local data file. Shouldn't be an issue but seen it pop up
         # during dev once or twice.
-        if len(self.jira_issues) > 0:
-            save_argus_data(self.jira_issues.values(), self._data_file())
+        if len(self.jira_issues.keys()) > 0:
+            JiraUtils.save_argus_data(list(self.jira_issues.values()), self._data_file())
 
-    def delete_on_disk_files(self):
+    def delete_on_disk_files(self) -> None:
         if utils.unit_test:
             return
 
@@ -220,7 +225,8 @@ class JiraProject:
         print('Successfully deleted cached Jira data for project: {}'.format(self))
         self.jira_connection = None
 
-    def refresh(self):
+    def refresh(self) -> None:
+        assert self.jira_connection is not None
         new_issues = JiraUtils.get_issues_for_project(self.jira_connection, self.project_name, self.updated)
         if len(new_issues) > 0:
             print('Found {} updated/new issues for {}. Saving to disk.'.format(len(new_issues), self.project_name))
@@ -241,49 +247,47 @@ class JiraProject:
                 'Attempted to link mismatched JiraConnection {} to JiraProject {}'.format(jira_connection, self))
         self.jira_connection = jira_connection
 
-    def config_file(self):
+    def config_file(self) -> str:
+        assert self.jira_connection is not None
         return os.path.join(jira_project_dir, '{}_{}.cfg'.format(self.jira_connection.connection_name, self.project_name))
 
-    def _data_file(self):
+    def _data_file(self) -> str:
+        assert self.jira_connection is not None
         return JiraProject.data_file(self.jira_connection.connection_name, self.project_name)
 
     @staticmethod
-    def data_file(connection_name, project_name):
+    def data_file(connection_name: str, project_name: str) -> str:
         return os.path.join(jira_data_dir, '{}_{}.dat'.format(connection_name, project_name))
 
-    def get_matching_issues(self, search_string, search_type='a'):
-        # type: (str, str) -> List[JiraIssue]
+    def get_matching_issues(self, search_string: str, search_type: str = 'a') -> List[JiraIssue]:
         """
         :param search_type: 'a': all. 'o': open. 'c': closed
         """
         results = []
-        for k, v in self.jira_issues.items():
-            if v.matches(self.jira_connection, search_string):
-                if search_type == 'o' and v.is_open:
-                    results.append(v)
-                elif search_type == 'c' and v.is_closed:
-                    results.append(v)
-                elif search_type == 'a':
-                    results.append(v)
+        if self.jira_connection is not None:
+            for k, v in self.jira_issues.items():
+                if v.matches(self.jira_connection, search_string):
+                    if search_type == 'o' and v.is_open:
+                        results.append(v)
+                    elif search_type == 'c' and v.is_closed:
+                        results.append(v)
+                    elif search_type == 'a':
+                        results.append(v)
         return results
 
-    def owns_issue(self, issue):
-        # type: (JiraIssue) -> bool
+    def owns_issue(self, issue: JiraIssue) -> bool:
         """
         Determines whether JiraConnection for issue matches this project and project_name matches
         """
+        assert self.jira_connection is not None
         return issue.project_name == self.project_name and issue.jira_connection_name == self.jira_connection.connection_name
 
-    def get_issue(self, issue_key):
-        """
-        :param issue_key: str to search for
-        :return: JiraIssue if found, None if not a member
-        """
+    def get_issue(self, issue_key: str) -> Optional[JiraIssue]:
         return None if issue_key not in self.jira_issues else self.jira_issues[issue_key]
 
     def translate_custom_field(self, field_name: str) -> str:
         """
-        Returns original name if field isn't custom
+        Returns original untralsnated name if field isn't custom
         """
         if field_name not in self._custom_fields:
             return field_name
@@ -296,7 +300,7 @@ class JiraProject:
         for jira_issue in self.jira_issues.values():
             jira_issue.resolve_dependencies(jira_manager)
 
-    def __str__(self):
+    def __str__(self) -> str:
         conn_name = self.jira_connection.connection_name if self.jira_connection is not None else 'unknown'
         return '{}:{} {}:{} {}:{} {}:{} {}:{}'.format(
             'JiraProject', self.project_name,

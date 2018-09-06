@@ -16,12 +16,11 @@ import configparser
 import os
 import sys
 import traceback
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, Set
 
 from jira import JIRAError
 
 from src import time_utils
-from src.jira_manager import JiraManager
 from src.jira_utils import JiraUtils
 from src.member_issues_by_status import JiraUserName, MemberIssuesByStatus
 from src.team import Team
@@ -29,6 +28,9 @@ from src.team_reports import (ReportCurrentLoad, ReportFilter, ReportFixVersion,
                               ReportReviewLoad, ReportTestLoad, ReportType)
 from src.utils import (clear, conf_dir, get_input, is_yes, pause, pick_value,
                        print_separator, save_argus_config)
+
+if TYPE_CHECKING:
+    from src.jira_manager import JiraManager
 
 
 class TeamManager:
@@ -47,11 +49,11 @@ class TeamManager:
         ReportType.META: ReportMeta()
     }
 
-    def __init__(self):
-        self._teams = {}
-        self._organizations = {}  # type: Dict[str, set[str]]
+    def __init__(self) -> None:
+        self._teams = {}  # type: Dict[str, Team]
+        self._organizations = {}  # type: Dict[str, Set[str]]
 
-    def prompt_for_team_addition(self, jira_manager):
+    def prompt_for_team_addition(self, jira_manager: 'JiraManager') -> None:
         name = get_input('Name this new team:', lowered=False)
 
         jira_connection_name = pick_value('Which JIRA Connection owns this team?', jira_manager.possible_connections(), True, 'Cancel')
@@ -72,7 +74,7 @@ class TeamManager:
             org_name = get_input('Enter a new org name, [q] to quit:', False)
             if org_name == 'q':
                 break
-            new_org = set()
+            new_org = set()  # type: Set[str]
             while True:
                 clear()
                 print('Org: {}'.format(org_name))
@@ -101,14 +103,14 @@ class TeamManager:
         del self._organizations[selection]
         self._save_config()
 
-    def list_teams(self):
+    def list_teams(self) -> None:
         print_separator(40)
         print('Currently defined teams:')
         for team in list(self._teams.values()):
             print('{}'.format(team))
         print_separator(40)
 
-    def pick_team(self, skip_list=None) -> Optional[Team]:
+    def pick_team(self, skip_list: Optional[List[str]] = None) -> Optional[Team]:
         if skip_list is None:
             valid_names = list(self._teams.keys())
         else:
@@ -118,10 +120,10 @@ class TeamManager:
             return None
         return self._teams[team_name]
 
-    def get_team_by_name(self, team_name):
+    def get_team_by_name(self, team_name: str) -> Team:
         return self._teams[team_name]
 
-    def edit_team(self, jira_manager: JiraManager, team_name: str = None) -> None:
+    def edit_team(self, jira_manager: 'JiraManager', team_name: str = None) -> None:
         if team_name is None:
             team_name = pick_value('Edit which team?', list(self._teams.keys()), True, 'Cancel')
             if team_name is None:
@@ -150,12 +152,12 @@ class TeamManager:
                         print('Added {} to {}.'.format(assignee, team.name))
                         self._save_config()
             elif cmd == 'r':
-                assignee = pick_value('Remove which assignee?', team.member_names, True, 'Cancel')
-                if assignee is None:
+                to_delete = pick_value('Remove which assignee?', team.member_names, True, 'Cancel')
+                if to_delete is None:
                     continue
-                confirm = get_input('Delete {} from {}: Are you sure?'.format(assignee, team.name))
+                confirm = get_input('Delete {} from {}: Are you sure?'.format(to_delete, team.name))
                 if confirm == 'y':
-                    team.delete_member(assignee)
+                    team.delete_member(to_delete)
             elif cmd == 'q':
                 break
             else:
@@ -179,7 +181,7 @@ class TeamManager:
             return to_remove
         return None
 
-    def create_new_member_alias(self, jira_manager: JiraManager) -> None:
+    def create_new_member_alias(self, jira_manager: 'JiraManager') -> None:
         """
         This linkage is performed on the logical 'Team' level rather than per JiraConnection.
         """
@@ -196,6 +198,8 @@ class TeamManager:
 
         # The linkage allows addition of >= 1 linked JiraUserName to whatever root member we want to add to.
         target_member = self._pick_member_for_linkage_operation('Add')
+        if target_member is None:
+            return
 
         changed = False
         while True:
@@ -234,16 +238,16 @@ class TeamManager:
         target_member_name = pick_value('{} a linked JIRA user-name on which member?'.format(action), target_team.member_names)
         if target_member_name is None:
             return None
-        return target_team.get_member(target_member_name)
+        return target_team.get_member_issues(target_member_name)
 
-    def remove_linked_member(self):
+    def remove_linked_member(self) -> None:
         target_member = self._pick_member_for_linkage_operation('Remove')
         if target_member is None:
             return
         if target_member.remove_alias():
             self._save_config()
 
-    def run_org_report(self, jira_manager):
+    def run_org_report(self, jira_manager: 'JiraManager') -> None:
         """
         Sub-menu driven method to run a specific type of report across multiple teams within an organization
         """
@@ -289,6 +293,8 @@ class TeamManager:
                     report_to_run = TeamManager.reports[report_type]
                     if TeamManager.reports[report_type].needs_duration:
                         report_to_run.since = time_utils.since_now(ReportFilter.get_since())
+                    # making mypy happy
+                    assert org_name is not None
                     self._run_org_report(org_name, report_to_run)
                     pause()
             except (ValueError, TypeError) as e:
@@ -296,7 +302,7 @@ class TeamManager:
                 traceback.print_exc()
                 pause()
 
-    def run_team_reports(self, jira_manager):
+    def run_team_reports(self, jira_manager: 'JiraManager') -> None:
         """
         Sub-menu driven method to run some specific reports of interest against teams. This will take into account
         linked members and run the report for all tickets across multiple JIRA connections.
@@ -337,6 +343,7 @@ class TeamManager:
                     print('Bad input: {}. Try again.'.format(choice))
                     pause()
                 else:
+                    assert selected_team is not None
                     TeamManager._run_report(jira_manager, selected_team, TeamManager.reports[report_type])
             except (ValueError, TypeError) as e:
                 print('Error on input: {}. Try again'.format(e))
@@ -353,7 +360,7 @@ class TeamManager:
         print('{}: Meta report: show data for meta workload for a team'.format(ReportType.META))
 
     @staticmethod
-    def populate_owned_jira_issues(jira_manager: JiraManager, team_members: List[MemberIssuesByStatus]) -> None:
+    def populate_owned_jira_issues(jira_manager: 'JiraManager', team_members: List[MemberIssuesByStatus]) -> None:
         related_jira_connections = set()
         # clear out any cached data on this team and build a set of JiraConnections we want to add tickets from
         for member in team_members:
@@ -400,7 +407,7 @@ class TeamManager:
                 print('{}'.format(report_filter.print_all_counts(member_issues.primary_name.user_name)))
 
     @staticmethod
-    def _run_report(jira_manager: JiraManager, team: Team, report_filter: ReportFilter) -> None:
+    def _run_report(jira_manager: 'JiraManager', team: Team, report_filter: ReportFilter) -> None:
         # We prompt for a new 'since' on each iteration of the loop in non-org reporting
         if report_filter.needs_duration:
             report_filter.since = time_utils.since_now(ReportFilter.get_since())
@@ -466,7 +473,7 @@ class TeamManager:
             pause()
 
     @classmethod
-    def from_file(cls):
+    def from_file(cls) -> 'TeamManager':
         config_parser = configparser.RawConfigParser()
         try:
             result = TeamManager()
@@ -511,7 +518,7 @@ class TeamManager:
             traceback.print_exc()
             raise e
 
-    def _save_config(self):
+    def _save_config(self) -> None:
         config_parser = configparser.RawConfigParser()
         # Save team names comma delim
         config_parser.add_section('manager')

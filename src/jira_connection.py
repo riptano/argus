@@ -16,9 +16,10 @@ import configparser
 import itertools
 import os
 import traceback
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Optional, Dict
 
 import requests
+from jira import Project
 from jira.client import JIRAError, JIRA
 from requests.auth import HTTPBasicAuth
 
@@ -40,8 +41,8 @@ class JiraConnection:
     Contains metadata for a jira connection and houses the resulting Jira object once connected
     """
 
-    def __init__(self, connection_name='unknown', url='unknown', user_name='unknown', password='unknown'):
-        self.possible_projects = []
+    def __init__(self, connection_name='unknown', url='unknown', user_name='unknown', password='unknown') -> None:
+        self.possible_projects = []  # type: List[str]
 
         self.connection_name = connection_name
         self._url = url.rstrip('/')
@@ -49,9 +50,9 @@ class JiraConnection:
         self._pass = password
         self._wrapped_jira_connection = None
 
-        # Map of str -> JiraProject. Internal representation is simply name of project. We have a 1:many mapping of JiraConnection
+        # Internal representation is simply name of project. We have a 1:many mapping of JiraConnection
         # to JiraProjects, and cannot have multiple projects with the same name on a single JIRA underlying object.
-        self._cached_jira_projects = {}
+        self._cached_jira_projects = {}  # type: Dict[str, JiraProject]
 
         if connection_name == 'unknown':
             raise ConfigError('Got JiraConnection constructor call with no connection_name. Cannot use this.')
@@ -79,8 +80,7 @@ class JiraConnection:
         self.save_config()
 
     @classmethod
-    def from_file(cls, connection_name):
-        # type: (str) -> Optional[JiraConnection]
+    def from_file(cls, connection_name: str) -> Optional['JiraConnection']:
         """
         Raises ConfigError if file is missing, internal data fails validation, or assignee list fails to be queried
         """
@@ -101,10 +101,10 @@ class JiraConnection:
 
             return result
         except configparser.NoOptionError as e:
-            print('Failed to create JiraConnection from file: {}. Error: {}'.format(config_file, e.message))
+            print('Failed to create JiraConnection from file: {}. Error: {}'.format(config_file, str(e)))
             return None
 
-    def save_config(self):
+    def save_config(self) -> None:
         """
         Blindly overwrites existing config file for connection.
         """
@@ -117,8 +117,7 @@ class JiraConnection:
 
         save_argus_config(config_parser, self._build_config(self.connection_name))
 
-    def pick_single_assignee(self):
-        # type: () -> Optional[str]
+    def pick_single_assignee(self) -> Optional[str]:
         """
         Having pick_assignees return an array of size 1 is very error prone. This wraps that.
         """
@@ -127,8 +126,7 @@ class JiraConnection:
             return None
         return result[0]
 
-    def pick_assignees(self, max_count):
-        # type: (int) -> Optional[List[str]]
+    def pick_assignees(self, max_count: int) -> Optional[List[str]]:
         """
         The available user count can be untenable for caching offline so we rely on the REST API rather than caching.
         :param: max_count [int] value >= 1 of max # of users to return
@@ -192,8 +190,7 @@ class JiraConnection:
             traceback.print_exc()
             return None
 
-    def pick_project(self, skip_cached=False):
-        # type: (bool) -> Optional[str]
+    def pick_project(self, skip_cached: bool = False) -> Optional[str]:
         self._refresh_project_names()
         coll = self.possible_projects[:]
         if skip_cached:
@@ -215,10 +212,12 @@ class JiraConnection:
                 clear()
         return pick
 
-    def _refresh_project_names(self):
+    def _refresh_project_names(self) -> None:
         # Cache project names locally within this object
         print('Querying project names from {}'.format(self.connection_name))
-        projects = self._wrapped_jira_connection.projects()
+        projects = []  # type: List[Project]
+        if self._wrapped_jira_connection is not None:
+            projects = self._wrapped_jira_connection.projects()
         self.possible_projects = []
         for p in projects:
             if 'deprecated' not in p.name:
@@ -229,7 +228,6 @@ class JiraConnection:
             print('No projects found in {}.'.format(self.connection_name))
 
     def add_and_link_jira_project(self, jira_project: JiraProject) -> None:
-        # type: (JiraProject) -> None
         # just overwrite it if we already have one with this name. Expected on init.
         self._cached_jira_projects[jira_project.project_name] = jira_project
         jira_project.jira_connection = self
@@ -249,30 +247,28 @@ class JiraConnection:
         new_project.save_config()
         self._cached_jira_projects[project_name] = new_project
 
-    def maybe_get_cached_jira_project(self, project_name):
-        # type: (str) -> Optional[JiraProject]
+    def maybe_get_cached_jira_project(self, project_name: str) -> Optional[JiraProject]:
         if project_name not in self._cached_jira_projects:
             return None
         return self._cached_jira_projects[project_name]
 
     @property
-    def cached_project_names(self):
+    def cached_project_names(self) -> List[str]:
         return list(self._cached_jira_projects.keys())
 
     @property
-    def cached_projects(self):
-        # type: () -> List[JiraProject]
+    def cached_projects(self) -> List[JiraProject]:
         return list(self._cached_jira_projects.values())
 
     @property
     def cached_jira_issues(self) -> List[List[JiraIssue]]:
         return list(itertools.chain([list(x.jira_issues.values()) for x in list(self._cached_jira_projects.values())]))
 
-    def update_all_cached_jira_projects(self):
+    def update_all_cached_jira_projects(self) -> None:
         for cached_project in list(self._cached_jira_projects.values()):
             cached_project.refresh()
 
-    def delete_cached_jira_project(self, cached_project_name):
+    def delete_cached_jira_project(self, cached_project_name: str) -> None:
         jira_project = self._cached_jira_projects.pop(cached_project_name, None)
         if jira_project is None:
             return
@@ -282,7 +278,7 @@ class JiraConnection:
         for cached_data in list(self._cached_jira_projects.values()):
             cached_data.delete_on_disk_files()
 
-    def delete_owned_views(self, jira_manager):
+    def delete_owned_views(self, jira_manager: 'JiraManager') -> None:
         to_remove = []
         for jira_view in list(jira_manager.jira_views.values()):
             if jira_view.owned_by(self):
@@ -291,21 +287,22 @@ class JiraConnection:
         for view_to_delete in to_remove:
             jira_manager.delete_jira_view(view_to_delete)
 
-    def contains_project(self, project_name):
+    def contains_project(self, project_name) -> bool:
         return project_name in self.possible_projects
 
+    # Not annotating type since it can return a List or a ResultList
     def search_issues(self, *args, **kwargs):
         return self._wrapped_jira_connection.search_issues(*args, **kwargs)
 
     @property
-    def url(self):
+    def url(self) -> str:
         return self._url
 
     @classmethod
-    def _build_config(cls, name):
+    def _build_config(cls, name: str) -> str:
         return os.path.join(jira_connection_dir, '{}.cfg'.format(name))
 
-    def __str__(self):
+    def __str__(self) -> str:
         result = 'JiraConnection:{conn} URL:{url} User:{user}'.format(
             conn=self.connection_name,
             url=self._url,

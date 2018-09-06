@@ -16,7 +16,7 @@ import sys
 import time
 import traceback
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from src.jira_connection import JiraConnection
 from src.jira_project import JiraProject
@@ -38,7 +38,7 @@ class TriageUpdate:
         self._open_issues: List[TriageIssue] = []
         self._closed_issues: List[TriageIssue] = []
 
-    def process(self, in_file_name: str, out_file_name: str=None) -> None:
+    def process(self, in_file_name: str, out_file_name: str = None) -> None:
         # Update jira projects before querying
         for name, jp in self._jira_projects.items():
             jp.refresh()
@@ -151,7 +151,7 @@ class TriageIssue:
 
     """
     A TriageIssue differs from a JiraIssue in terms of the source of the data. We expect this to come from an export
-    of our combined google doc sheet we use to triage in lieu of replicating every OSS C* ticket we might want to work
+    of our combined google doc sheet we use to triage in lieu of replicating every external ticket we might want to work
     on into our private JIRA. TriageIssues contain index offsets, logic to initialize from a comma-delimited line, some
     logic to take data from a JiraIssue and glob it in, and output logic.
     """
@@ -168,15 +168,15 @@ class TriageIssue:
     type_index = 10
     component_index = 11
 
-    def __init__(self, line):
+    def __init__(self, line: str) -> None:
         """
         When we init from .csv, we assume we don't need to sanitize each field. Mostly because we *can't* init from
         .csv if we have , in the middle of fields... since it wouldn't be csv.
         """
         sa = line.split(',')
-        self._jira_project = None
-        self._connection_name = ''
-        self._data = sa
+        self._jira_project = None  # type: Optional[JiraProject]
+        self._connection_name = ''  # type: str
+        self._data = sa  # type: List[str]
         # Strip out , and " from strings
         for i in range(0, len(self._data) - 1):
             self._data[i] = self._data[i].replace(',', ';').replace('"', '')
@@ -211,19 +211,24 @@ class TriageIssue:
     def set_component(self, new_value):
         self._data[self.component_index] = new_value
 
+    @staticmethod
+    def validate(field: Optional[str]) -> str:
+        if field is None:
+            return 'UNKNOWN'
+        return field
+
     def update_self(self, jira_issue: JiraIssue, jira_project: JiraProject) -> None:
         assert jira_issue is not None, 'Got null JiraIssue in update_self. Aborting.'
         self._jira_project = jira_project
 
-        self._data[self.assignee_index] = TriageIssue._sanitize(jira_issue.assignee)
+        self._data[self.assignee_index] = TriageIssue.sanitize(self.validate(jira_issue.assignee))
 
         # Custom handling for reviewer
-        self._data[self.reviewer_index] = TriageIssue._sanitize(self._get_reviewer(jira_issue))
-
-        self._data[self.status_index] = TriageIssue._sanitize(jira_issue.status)
-        self._data[self.resolution_index] = TriageIssue._sanitize(jira_issue.resolution)
-        self._data[self.type_index] = jira_issue.issuetype
-        self._data[self.prio_index] = jira_issue.priority
+        self._data[self.reviewer_index] = TriageIssue.sanitize(self._get_reviewer(jira_issue))
+        self._data[self.status_index] = TriageIssue.sanitize(self.validate(jira_issue.status))
+        self._data[self.resolution_index] = TriageIssue.sanitize(self.validate(jira_issue.resolution))
+        self._data[self.type_index] = self.validate(jira_issue.issuetype)
+        self._data[self.prio_index] = self.validate(jira_issue.priority)
 
         combined = set()
         # Assume raw text string for component comes from .csv
@@ -241,7 +246,7 @@ class TriageIssue:
         return 'unassigned'
 
     @staticmethod
-    def _sanitize(field):
+    def sanitize(field: str) -> str:
         """
         Strips out , and "" from input, leaving behind something somewhat safer for csv processing
         :param field: str
@@ -253,13 +258,15 @@ class TriageIssue:
 
     @property
     def reviewer_field(self) -> str:
+        assert self._jira_project is not None
         return self._jira_project.translate_custom_field('reviewer')
 
     @property
     def reviewer_two_field(self) -> str:
+        assert self._jira_project is not None
         return self._jira_project.translate_custom_field('reviewer2')
 
-    def set_connection_name(self, conn_name):
+    def set_connection_name(self, conn_name: str) -> None:
         self._connection_name = conn_name
 
     @property
@@ -281,3 +288,4 @@ class TriageIssue:
             return result
         except (ValueError, TypeError) as e:
             print('Failed to encode issue as string. key with issue: {}. Exception: {}'.format(self.key, e))
+            return 'UNKNOWN - FAILURE: {}'.format(self.key)

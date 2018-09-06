@@ -18,7 +18,7 @@ import os
 import traceback
 
 from jira import JIRAError
-from typing import Dict, Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional, List, Tuple
 
 from src.display_filter import DisplayFilter
 from src.jira_connection import JiraConnection
@@ -44,10 +44,13 @@ class JiraManager:
     dashboards, editing, removing, etc.
     """
 
-    def __init__(self, team_manager):
+    def __init__(self, team_manager: 'TeamManager') -> None:
         """
         Recreates any JiraConnections and JiraViews based on saved data in conf/jira.cfg
         """
+
+        self.team_manager = team_manager
+
         # Holds connected Jira objects to be queried by JiraViews
         self._jira_connections = {}  # type: Dict[str, JiraConnection]
 
@@ -65,7 +68,7 @@ class JiraManager:
             config_parser = configparser.RawConfigParser()
             config_parser.read(jira_conf_file)
 
-            connection_names = []
+            connection_names = []  # type: List[str]
             if config_parser.has_section('JiraManager') and config_parser.has_option('JiraManager', 'Connections'):
                 connection_names = config_parser.get('JiraManager', 'Connections').split(',')
 
@@ -83,13 +86,13 @@ class JiraManager:
                     print('ConfigError with project {}: {}'.format(connection_name, ce))
 
             # Construct JiraViews so they can be used during JiraDashboard creation.
-            view_names = []
+            view_names = []  # type: List[str]
             if config_parser.has_option('JiraManager', 'Views'):
                 view_names = config_parser.get('JiraManager', 'Views').split(',')
 
             for name in view_names:
                 try:
-                    jv = JiraView.from_file(self, name, team_manager)
+                    jv = JiraView.from_file(self, name, self.team_manager)
                     self.jira_views[jv.name] = jv
                 except ConfigError as ce:
                     print('ConfigError with jira view {}: {}'.format(name, ce))
@@ -121,6 +124,9 @@ class JiraManager:
                     if add == 'y':
                         new_jira_connection = self.add_connection(
                             'Name the connection (reference url: {}):'.format(new_jira_project.url))
+                        if new_jira_connection is None:
+                            print('Error during connection add. Cannot link and use JiraProject.')
+                            continue
                         new_jira_connection.save_config()
                         new_jira_project.jira_connection = new_jira_connection
                     else:
@@ -174,17 +180,20 @@ class JiraManager:
                         print('   {}: {}'.format(jira_connection.connection_name, jira_connection.url))
                     if is_yes('Would you like to add one now?'):
                         parent_jira_connection = self.add_connection('Name the connection (reference url: {}):'.format(url))
+                        if parent_jira_connection is None:
+                            print('Ran into error adding parent connection. Skipping.')
                     else:
                         print('JiraProject data and config will not be added nor cached. Either add it manually or restart Argus and reply y')
                         break
 
                 new_jira_project = JiraProject(parent_jira_connection, project_name, url, custom_fields)
-                parent_jira_connection.add_and_link_jira_project(new_jira_project)
+                if parent_jira_connection is not None:
+                    parent_jira_connection.add_and_link_jira_project(new_jira_project)
         print('Resolving dependencies between JiraIssues')
         self._resolve_issue_dependencies()
         print('JiraManager initialization complete.')
 
-    def add_connection(self, prompt: str='Name this connection:') -> Optional[JiraConnection]:
+    def add_connection(self, prompt: str = 'Name this connection:') -> Optional[JiraConnection]:
         """
         Swallows exceptions to allow for errors during JiraProject caching w/out invalidating addition of JiraConnection
         """
@@ -219,7 +228,7 @@ class JiraManager:
         self._save_config()
         return new_jira_connection
 
-    def remove_connection(self):
+    def remove_connection(self) -> None:
         """
         Removes an existing url/user/pass JIRA connection and the corresponding Jira object
         """
@@ -234,7 +243,7 @@ class JiraManager:
             del self._jira_connections[selection]
             self._save_config()
 
-    def get_jira_connection(self, connection_name):
+    def get_jira_connection(self, connection_name: str) -> JiraConnection:
         if connection_name not in list(self._jira_connections.keys()):
             raise ConfigError('Failed to find connection: {}'.format(connection_name))
         return self._jira_connections[connection_name]
@@ -250,27 +259,26 @@ class JiraManager:
             return None
         return jira_projects[project_name].get_issue(jira_issue_key)
 
-    def delete_jira_view(self, jira_view_name):
+    def delete_jira_view(self, jira_view_name: str) -> None:
         print('Deleting jira view: {}'.format(jira_view_name))
         del self.jira_views[jira_view_name]
 
-    def possible_connections(self):
+    def possible_connections(self) -> List[str]:
         return list(self._jira_connections.keys())
 
-    def list_all_jira_views(self):
+    def list_all_jira_views(self) -> None:
         print('Defined JiraViews:')
         for jira_view in list(self.jira_views.values()):
             print('   {}'.format(jira_view))
 
-    def display_view(self):
+    def display_view(self) -> None:
         view_name = pick_value('Which view?', list(self.jira_views.keys()), True, 'Back')
         if view_name is None:
             return
         self.jira_views[view_name].display_view(self)
         self._save_config()
 
-    def add_view(self, team_manager):
-        # type: (TeamManager) -> None
+    def add_view(self) -> None:
         if len(self._jira_connections) == 0:
             if is_yes('No JiraConnections to add a JiraView to. Would you like to add a connection now?'):
                 self.add_connection()
@@ -282,21 +290,20 @@ class JiraManager:
             return
         new_view = JiraView(view_name, self._jira_connections[jira_connection_name])
         self.jira_views[view_name] = new_view
-        new_view.edit_view(team_manager, self)
+        new_view.edit_view(self, self.team_manager)
         self._save_config()
 
-    def edit_view(self, team_manager):
-        # type: (TeamManager) -> None
+    def edit_view(self)-> None:
         if len(self.jira_views) == 0:
             if is_yes('No views to edit. Would you like to add a view?'):
-                self.add_view(team_manager)
+                self.add_view()
             else:
                 return
         view_name = pick_value('Select a view to edit', list(self.jira_views.keys()))
         if view_name is None:
             return
         view = self.jira_views[view_name]
-        view.edit_view(team_manager, self)
+        view.edit_view(self, self.team_manager)
         if view.is_empty():
             print('Jira View is empty. Remove it?')
             conf = get_input('Jira View is empty. Remove it? (q to cancel):')
@@ -304,7 +311,7 @@ class JiraManager:
                 del self.jira_views[view_name]
         self._save_config()
 
-    def remove_view(self):
+    def remove_view(self) -> None:
         if len(self.jira_views) == 0:
             print('No views to remove.')
             return
@@ -329,7 +336,7 @@ class JiraManager:
 
             self._save_config()
 
-    def list_dashboards(self):
+    def list_dashboards(self) -> None:
         if len(self.jira_dashboards) == 0:
             print('No dashboards. Create one first.')
             return
@@ -339,7 +346,7 @@ class JiraManager:
         for dashboard in list(self.jira_dashboards.values()):
             print('{}'.format(dashboard))
 
-    def display_dashboard(self):
+    def display_dashboard(self) -> None:
         if len(self.jira_dashboards) == 0:
             print('No dashboards. Create one first.')
             return
@@ -349,14 +356,14 @@ class JiraManager:
 
         self.jira_dashboards[dn].display_dashboard(self, self.jira_views)
 
-    def add_dashboard(self):
+    def add_dashboard(self) -> None:
         new_dash = JiraDashboard.build(self.jira_views)
         if new_dash is None:
             return
         self.jira_dashboards[new_dash.name] = new_dash
         self._save_config()
 
-    def edit_dashboard(self):
+    def edit_dashboard(self) -> None:
         dn = pick_value('Which dashboard?', list(self.jira_dashboards.keys()), True, 'Cancel')
         if dn is None:
             return
@@ -364,7 +371,7 @@ class JiraManager:
         dash.edit_dashboard(self.jira_views)
         self._save_config()
 
-    def remove_dashboard(self):
+    def remove_dashboard(self) -> None:
         dn = pick_value('Remove which dashboard?', list(self.jira_dashboards.keys()), True, 'Cancel')
         if dn is None:
             return
@@ -373,9 +380,11 @@ class JiraManager:
             del self.jira_dashboards[dn]
             self._save_config()
 
-    def display_escalations(self):
+    def display_escalations(self) -> None:
         jira_connection_name = pick_value('Select a JIRA Connection to view Escalation type tickets:',
                                           list(self._jira_connections.keys()))
+        if jira_connection_name is None:
+            return
         jira_connection = self._jira_connections[jira_connection_name]
         jira_issues = JiraUtils.get_issues_by_query(jira_connection,
                                                     'type = \'Escalation\' AND resolution = unresolved')
@@ -400,14 +409,14 @@ class JiraManager:
                 print('Bad input. Try again')
                 pause()
 
-    def run_debug(self):
+    def run_debug(self) -> None:
         """
         Used during development to bypass complex menu operations and try out a single new operation outside unit testing
         """
         print('TEST: [{:{width}.{width}}]'.format('I am testing a 5.5 thing', width=5))
         pause()
 
-    def search_projects(self):
+    def search_projects(self) -> None:
         """
         Does a one-off ad-hoc search for strings in all cached fields for all cached JiraProjects.
         Keeping at scope of JiraManager as search is a meta-scoped search of all cached JiraProjects independent of JiraConnection
@@ -488,28 +497,32 @@ class JiraManager:
         """
         return JiraIssue.non_cached_issue(issue_key)
 
-    def list_projects(self):
+    def list_projects(self) -> None:
         jira_projects = self.get_all_cached_jira_projects()
         for project in list(jira_projects.values()):
+            if project.jira_connection is None:
+                continue
             print(' (Conn:{conn} Name:{name}). Issue count: {count}. Updated: {updated}'.format(
                 conn=project.jira_connection.connection_name,
                 name=project.project_name,
                 count=len(project.jira_issues),
                 updated=project.updated))
 
-    def change_password(self):
+    def change_password(self) -> None:
         # Need to save config to re-encrypt all the username/password info w/new pass
         self._save_config()
 
-    def add_multi_jira_dashboard(self):
+    def add_multi_jira_dashboard(self) -> None:
         options = sorted(self._jira_connections.keys())
         add_new = 'Add a new Jira Connection'
         options.append(add_new)
 
-        pairs = []
+        pairs = []  # type: List[Tuple[Optional[JiraConnection], str]]
         while True:
             print('Current contents of report]')
             for jira_connection, user in pairs:
+                if jira_connection is None:
+                    continue
                 print('   Connection: {} User: {}'.format(jira_connection.connection_name, user))
 
             command = pick_value('[Connection inclusion]', options, True, 'Done', False)
@@ -517,14 +530,19 @@ class JiraManager:
                 break
             elif command == add_new:
                 new_conn = self.add_connection()
+                if new_conn is None:
+                    return
             else:
                 new_conn = self._jira_connections[command]
 
             print('Selecting user name from {}'.format(new_conn.connection_name))
-            user = new_conn.pick_single_assignee()
-            if user is None:
-                break
-            pairs.append((new_conn, user))
+            # Make mypy happy...
+            if new_conn is None:
+                return
+            picked = new_conn.pick_single_assignee()
+            if picked is None:
+                return
+            pairs.append((new_conn, picked))
         # Any error in the user addition process can bubble up with only 1 user selected
         if len(pairs) <= 1:
             print('Found less than the required minimum of 2 entries. Not adding report.')
@@ -537,13 +555,15 @@ class JiraManager:
 
         # Create a JiraView for each of these and then dump them into the dashboard
         for jira_connection, user in pairs:
+            # Make mypy happy...
+            if jira_connection is None:
+                continue
             view_name = '{}_{}'.format(jira_connection.connection_name, user)
             if view_name in list(self.jira_views.keys()):
                 print('Already found a view named {} in jira_views. Using that instead.'.format(view_name))
                 new_jira_view = self.jira_views[view_name]
             else:
                 new_jira_view = JiraView('{}_{}'.format(jira_connection.connection_name, user), jira_connection)
-
                 new_jira_view.add_single_filter('assignee', user, 'i', 'OR')
                 new_jira_view.add_single_filter('reviewer', user, 'i', 'OR')
                 new_jira_view.add_single_filter('reviewer2', user, 'i', 'OR')
@@ -555,9 +575,11 @@ class JiraManager:
         print('Completed configuration of new report: {}'.format(name))
         self._save_config()
 
-    def add_label_view(self):
+    def add_label_view(self) -> None:
         name = get_input('Name this view: ')
         jira_connection_name = pick_value('Which JIRA Connection does this belong to? ', list(self._jira_connections.keys()))
+        if jira_connection_name is None:
+            return
         jira_connection = self._jira_connections[jira_connection_name]
         new_view = JiraView(name, jira_connection)
         self.jira_views[name] = new_view
@@ -582,7 +604,6 @@ class JiraManager:
         """
         Creates a report of all tickets, including dependencies, to the input FixVersion.
         """
-
         # Only support creating of this on a single JiraConnection, with the assumption that multiple projects on that
         # connection can share a FixVersion, but these won't straddle to exterior Jira instances
         target_connection = self.pick_jira_connection('FixVersion report for which JiraConnection?')
@@ -654,7 +675,7 @@ class JiraManager:
                 return False
         return True
 
-    def pick_jira_connection(self, prompt: str='Which JIRA connection?') -> Optional[JiraConnection]:
+    def pick_jira_connection(self, prompt: str = 'Which JIRA connection?') -> Optional[JiraConnection]:
         if not self._prompt_connection_add_if_none():
             return None
 
@@ -680,7 +701,7 @@ class JiraManager:
                 return jira_connection.maybe_get_cached_jira_project(project_name)
         return None
 
-    def cache_new_jira_project_data(self):
+    def cache_new_jira_project_data(self) -> None:
         if not self._prompt_connection_add_if_none():
             return
 
@@ -692,7 +713,7 @@ class JiraManager:
         self._jira_connections[jira_connection_name].cache_new_jira_project(self)
         self._resolve_issue_dependencies()
 
-    def delete_cached_jira_project(self):
+    def delete_cached_jira_project(self) -> None:
         jira_connection_name = pick_value('Delete cached project data for which JiraConnection?',
                                           [x.connection_name for x in self.jira_connections()])
         if jira_connection_name is None:
@@ -708,21 +729,21 @@ class JiraManager:
                 jira_connection.maybe_get_cached_jira_project(project_cache_to_delete))):
             jira_connection.delete_cached_jira_project(project_cache_to_delete)
 
-    def list_jira_connections(self):
+    def list_jira_connections(self) -> None:
         print('Known JiraConnection objects:')
         for jira_connection in list(self._jira_connections.values()):
             print('   {}'.format(jira_connection))
 
-    def update_cached_jira_project_data(self, needs_pause=True):
+    def update_cached_jira_project_data(self, needs_pause=True) -> None:
         for jira_connection in list(self._jira_connections.values()):
             jira_connection.update_all_cached_jira_projects()
         if needs_pause:
             pause()
 
-    def jira_connection_count(self):
+    def jira_connection_count(self) -> int:
         return len(self._jira_connections)
 
-    def _save_config(self):
+    def _save_config(self) -> None:
         """
         Saves config for JiraManager, all connections, and all views
         """

@@ -21,13 +21,11 @@ import sys
 import tempfile
 import threading
 import time
+from configparser import RawConfigParser
 from glob import glob
 from subprocess import Popen
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Callable, List, Optional, TextIO, Tuple
 from urllib import request
-
-if TYPE_CHECKING:
-    from typing import List, Optional
 
 DESCRIPTION = 'argus, command-line JIRA multi-tool'
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
@@ -67,14 +65,14 @@ builds_to_check_str = 'builds_to_check'
 recent_str = 'recent_builds_to_check'
 
 debug = False
-argus_log = None
+argus_log = None  # type: Optional[TextIO]
 unit_test = False
 
 show_dependencies = False
 show_only_open_dependencies = True
 
 
-def save_argus_config(config_parser, file_name):
+def save_argus_config(config_parser: RawConfigParser, file_name: str) -> None:
     """
     Redirects saving of config file to test folder if running a unit test
     """
@@ -84,62 +82,54 @@ def save_argus_config(config_parser, file_name):
         config_parser.write(config_file)
 
 
-def build_config_name(file_name):
+def build_config_name(file_name: str) -> str:
     if unit_test:
         return os.path.join('tests', file_name)
     return file_name
 
 
-def save_argus_data(items, file_name):
-    if unit_test:
-        file_name = os.path.join('tests', file_name)
-    with open(file_name, 'wb') as cf:
-        for item in items:
-            item.serialize(cf)
-
-
-def clear():
+def clear() -> None:
     if is_win():
         os.system('cls')
     else:
         os.system('clear')
 
 
-def encode_password():
+def encode_password() -> str:
     return Config.MenuPass
 
 
-def browser():
+def browser() -> str:
     return Config.Browser
 
 
-def open_url_in_browser(url):
+def open_url_in_browser(url: str) -> None:
     Popen([browser(), url])
     print('Opened {}. Press enter to continue.'.format(url))
 
 
-def change_browser():
+def change_browser() -> None:
     new_browser = get_input('Enter command line of browser:', lowered=False)
     Config.Browser = new_browser
 
 
-def time_format_string():
+def time_format_string() -> str:
     return '%Y/%m/%d %H:%H'
 
 
-def is_win():
+def is_win() -> bool:
     return 'nt' in os.name
 
 
-def is_mac():
+def is_mac() -> bool:
     return 'darwin' in sys.platform
 
 
-def pause():
+def pause() -> None:
     input('Press Enter to continue')
 
 
-def indent(num, value):
+def indent(num: int, value: str) -> None:
     """
     Avoiding textwrap import
     """
@@ -149,7 +139,7 @@ def indent(num, value):
     print(to_print + value)
 
 
-def get_input(prompt: str, lowered: bool=True) -> str:
+def get_input(prompt: str, lowered: bool = True) -> str:
     response = input('{} '.format(prompt)).strip()
     if lowered:
         response = response.lower()
@@ -160,8 +150,7 @@ def get_config(val, delim=','):
     return val.split(delim)[1].rstrip()
 
 
-def is_yes(question):
-    # type: (str) -> bool
+def is_yes(question: str) -> bool:
     while True:
         val = get_input("{} (y/n):".format(question))
         if val.lower() == 'y' or val.lower() == 'yes':
@@ -172,28 +161,28 @@ def is_yes(question):
             print("Invalid input {}. Please try again...".format(val))
 
 
-def encode(key, clear):
+def encode(key: str, to_encode: str) -> str:
     """
     Courtesy of http://stackoverflow.com/questions/2490334/simple-way-to-encode-a-string-according-to-a-password
     Mostly just looking to keep from having an easily readable password stored on the fs
     """
     enc = []
-    for i in range(len(clear)):
+    for i in range(len(to_encode)):
         key_c = key[i % len(key)]
-        enc_c = chr((ord(clear[i]) + ord(key_c)) % 256)
+        enc_c = chr((ord(to_encode[i]) + ord(key_c)) % 256)
         enc.append(enc_c)
     # `base64.urlsafe_b64encode` takes a byte string and returns a byte string.
     # Unfortunately, right now `enc` [after the `join`] is a unicode string, and our current function, `encode`,
-    # also wants to return a unicode string! No problem, we just have to call `.encode()` on the output of `join`,
+    # also wants to return a unicode string. No problem, we just have to call `.encode()` on the output of `join`,
     # to get a bytes string to pass into `base64.urlsafe_b64encode`. Then, we call `.decode()` on the output
     # in order to transform it from a bytes string into a unicode string.
     return base64.urlsafe_b64encode(''.join(enc).encode()).decode()
 
 
-def pick_substring(header,                              # type: str
-                   options,                             # type: List[str]
-                   allow_exit=True,                     # type: bool
-                   exit_text='back to previous menu'    # type: str
+def pick_substring(header: str,
+                   options: List[str],
+                   allow_exit: bool = True,
+                   exit_text: str = 'back to previous menu',
                    ) -> Optional[str]:
     """
     Prompts for regex before passing into regular pick_value
@@ -216,12 +205,12 @@ def pick_substring(header,                              # type: str
     return pick_value('Pick from the following matched projects', filtered_options, allow_exit, exit_text)
 
 
-def pick_value(header,                              # type: str
-               options,                             # type: List[str]
-               allow_exit=True,                     # type: bool
-               exit_text='back to previous menu',   # type: str
-               sort=True,                           # type: bool
-               silent=False                         # type: bool
+def pick_value(header: str,
+               options: List[str],
+               allow_exit: bool = True,
+               exit_text: str = 'back to previous menu',
+               sort: bool = True,
+               silent: bool = False
                ) -> Optional[str]:
     """
     :param header: Message to print before options
@@ -263,7 +252,7 @@ def pick_value(header,                              # type: str
             continue
 
 
-def display_results(results, sort=True):
+def display_results(results: List[str], sort: bool = True) -> None:
     sorted_results = sorted(results) if sort else results
     num_results = len(sorted_results)
     result_width = len(str(num_results))
@@ -272,7 +261,7 @@ def display_results(results, sort=True):
         print(format_str.format(i, result))
 
 
-def decode(key, enc):
+def decode(key: str, enc: str) -> str:
     dec = []
     enc = base64.urlsafe_b64decode(enc).decode()
     for i in range(len(enc)):
@@ -282,15 +271,15 @@ def decode(key, enc):
     return ''.join(dec)
 
 
-def build_config_file(directory, file_name):
+def build_config_file(directory: str, file_name: str) -> str:
     return os.path.join(directory, '{}.cfg'.format(file_name))
 
 
-def build_jenkins_data_file(connection_name):
+def build_jenkins_data_file(connection_name: str) -> str:
     return os.path.join(jenkins_data_dir, '{}.dat'.format(connection_name))
 
 
-class DEPENDENCY_TYPE:
+class DependencyType:
     ALL = 1
     DEPENDENT_ONLY = 2
     NONE = 3
@@ -298,8 +287,8 @@ class DEPENDENCY_TYPE:
 
 class Config:
     JENKINS_URL = 'unknown'
-    JENKINS_BRANCHES = 'unknown'
-    JENKINS_PROJECT = 'unknown'
+    JENKINS_BRANCHES = []  # type: List[str]
+    JENKINS_PROJECT = []  # type: List[str]
 
     if is_win():
         Browser = 'chrome'
@@ -310,13 +299,13 @@ class Config:
     MenuPass = ''
 
     @classmethod
-    def init_argus(cls):
+    def init_argus(cls) -> None:
         cls._init_directories()
         cls._init_jenkins_config()
         cls._init_custom_config()
 
     @staticmethod
-    def _init_directories():
+    def _init_directories() -> None:
         directories = DIR_LIST
         if unit_test:
             directories = [os.path.join(TEST_DIR, d) for d in directories]
@@ -325,7 +314,7 @@ class Config:
                 os.mkdir(directory)
 
     @staticmethod
-    def _init_jenkins_config():
+    def _init_jenkins_config() -> None:
         """Initializes a Jenkins config file if it does not already exist."""
         conf_path = jenkins_conf_file
         if unit_test:
@@ -339,15 +328,15 @@ class Config:
         if not config_parser.has_section(build_options_str):
             config_parser.add_section(build_options_str)
         if not config_parser.has_option(build_options_str, builds_to_check_str):
-            config_parser.set(build_options_str, builds_to_check_str, 30)
+            config_parser.set(build_options_str, builds_to_check_str, str(30))
         if not config_parser.has_option(build_options_str, recent_str):
-            config_parser.set(build_options_str, recent_str, 3)
+            config_parser.set(build_options_str, recent_str, str(3))
 
         with open(conf_path, 'w') as config_file:
             config_parser.write(config_file)
 
     @staticmethod
-    def _init_custom_config():
+    def _init_custom_config() -> None:
         custom_params_path = CUSTOM_PARAMS_PATH
         if unit_test:
             custom_params_path = os.path.join(TEST_DIR, CUSTOM_PARAMS_PATH)
@@ -361,10 +350,10 @@ class Config:
             config_parser.read(custom_params_path)
             Config.JENKINS_URL = config_parser.get('JENKINS', 'url').rstrip('/')
             Config.JENKINS_BRANCHES = config_parser.get('JENKINS', 'branches').split(',')
-            Config.JENKINS_PROJECT = config_parser.get('JENKINS', 'project_name')
+            Config.JENKINS_PROJECT = list(config_parser.get('JENKINS', 'project_name'))
 
 
-def get_build_options():
+def get_build_options() -> Tuple[int, int]:
     config_parser = configparser.RawConfigParser()
     if unit_test:
         config_parser.read(os.path.join(TEST_DIR, jenkins_conf_file))
@@ -379,41 +368,41 @@ class ConfigError(ValueError):
     pass
 
 
-def tempdir():
+def tempdir() -> str:
     return tempfile.gettempdir()
 
 
-def json_dir(branch, build_type):
+def json_dir(branch: str, build_type: str) -> str:
     return os.path.join(tempdir(), 'argus', branch, build_type)
 
 
-def branch_dir(branch):
+def branch_dir(branch: str) -> str:
     return os.path.join(tempdir(), 'argus', branch)
 
 
-def argus_temp_dir():
+def argus_temp_dir() -> str:
     return os.path.join(tempdir(), 'argus')
 
 
-def is_empty(value):
-    # type: (Optional[str]) -> bool
+def is_empty(value: Optional[str]) -> bool:
     if value is None or value == '' or value.lower() == 'q':
         return True
     return False
 
 
-def print_separator(count, char='-'):
+def print_separator(count: int, char: str = '-') -> None:
     print(char * count + os.linesep)
 
 
-def argus_debug(value):
-    # type: (str) -> None
+def argus_debug(value: str) -> None:
     if debug:
         print('DEBUG: {}'.format(value))
-        argus_log.write(value.encode('utf-8') + os.linesep)
+        if argus_log is None:
+            return
+        argus_log.write(str(value.encode('utf-8')) + os.linesep)
 
 
-def load_file(tpl):
+def load_file(tpl: Tuple[Any, Any, Any]) -> None:
     branch, build_type, build_number = tpl
     file_path = os.path.join(tempdir(), 'argus', branch, build_type, '{}.json'.format(build_number))
 
@@ -444,7 +433,7 @@ def get_connection_name(filename: str) -> str:
 
 
 class MultiTasker:
-    def __init__(self, max_threads: int=5, stagger_time: float=.2, pause_time: int=1) -> None:
+    def __init__(self, max_threads: int = 5, stagger_time: float = .2, pause_time: int = 1) -> None:
         """
         Runs jobs asynchronously
         :param max_threads: The max # of threads allowed at a time
@@ -457,18 +446,18 @@ class MultiTasker:
         self.pause = pause_time
         self.threads = []  # type: List[threading.Thread]
 
-    def wrap_job(self, target, args):
+    def wrap_job(self, target: Callable, args: tuple):
         with threading.Lock():
             self.running_count += 1
         target(*args)
         with threading.Lock():
             self.running_count -= 1
 
-    def add_job(self, target, args):
+    def add_job(self, target: Callable, args: tuple):
         thread = threading.Thread(target=self.wrap_job, args=(target, args))
         self.threads.append(thread)
 
-    def run(self):
+    def run(self) -> None:
         for thread in self.threads:
             while self.running_count >= self.max_threads:
                 time.sleep(self.pause)
@@ -493,19 +482,18 @@ def clear_tab_complete_vocabulary() -> None:
     presses tab.
     :return:
     """
-    def completer():
+    # Matching signature expected in set_completer according to mypy
+    def completer(arg1: str, arg2: int) -> Optional[str]:
         return None
     readline.set_completer(completer)
 
 
-def build_regex_pattern(str_to_build):
-    # type: (str) -> re._sre.SRE_Pattern
+def build_regex_pattern(str_to_build: str):
     pattern = r"{}$".format(str_to_build.replace("*", "(.*?)"))
     return re.compile(pattern)
 
 
-def tab_complete(func, args, word_list, regex=False, cleanup=False):
-    # type: (function, tuple, list, bool, bool) -> list
+def tab_complete(func: Callable, args: tuple, word_list: List[str], regex: bool = False, cleanup: bool = False) -> Optional[str]:
     """
     Wraps a function that takes user input with a vocabulary to support tab completion
     :param func: The function to run, ie raw_input, input, get_input
@@ -515,7 +503,7 @@ def tab_complete(func, args, word_list, regex=False, cleanup=False):
     :param cleanup: When True, vocabulary will be reset upon completion (prevents inaccurate tab completions)
     :return: list of selection matches, if only one match a list will still be returned
     """
-    def completer(text, state):
+    def completer(text: str, state: int) -> Optional[str]:
         options = [word for word in word_list if word.startswith(text)]
         return options[state] if state < len(options) else None
 
@@ -527,5 +515,5 @@ def tab_complete(func, args, word_list, regex=False, cleanup=False):
 
     if regex and '*' in value:
         pattern = build_regex_pattern(value)
-        return filter(pattern.match, word_list)
-    return [value]
+        return next(filter(pattern.match, word_list))
+    return value

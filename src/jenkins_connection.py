@@ -17,13 +17,13 @@ import sys
 import time
 from configparser import RawConfigParser
 from getpass import getpass
-from typing import TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 
-from jenkinsapi.custom_exceptions import UnknownJob
+from jenkinsapi import custom_exceptions
 from jenkinsapi.jenkins import Jenkins
 from requests.exceptions import HTTPError
 from src.jenkins_interface import download_builds
-from src.jenkins_job import JenkinsJob
+from src.jenkins_job import JenkinsJob, JenkinsTest
 from src.jenkins_view import JenkinsView
 from src.utils import (ConfigError, MultiTasker, build_config_file,
                        build_jenkins_data_file, clear, decode, encode,
@@ -32,16 +32,15 @@ from src.utils import (ConfigError, MultiTasker, build_config_file,
                        save_argus_config)
 
 if TYPE_CHECKING:
-    from typing import Dict, List, Optional
-    from src.jenkins_job import JenkinsTest
+    from src.jenkins_manager import JenkinsManager
 
 
 class JenkinsConnection:
 
     def __init__(self,
-                 connection_name,   # type: str
-                 url,               # type: str
-                 auth=None          # type: Optional[Dict[str, str]]
+                 connection_name: str,
+                 url: str,
+                 auth: Optional[Dict[str, str]] = None
                  ) -> None:
         """
         :param connection_name: Name of connection
@@ -70,13 +69,13 @@ class JenkinsConnection:
         # Map of cached view_names -> jenkins_views
         self.jenkins_views = {}  # type: Dict[str, JenkinsView]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '{}'.format(self.name)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return 'JenkinsConnection({}, {})'.format(self.name, self.url)
 
-    def create_jenkins_obj(self, url, username=None, password=None):
+    def create_jenkins_obj(self, url: str, username: str = None, password: str = None) -> Jenkins:
         """
         Currently the sole purpose for this method is to have an easy method to
         mock when we don't want to request a real URL.
@@ -96,22 +95,22 @@ class JenkinsConnection:
                 raise e
 
     @property
-    def job_names(self):
+    def job_names(self) -> List[str]:
         return list(self.jenkins_jobs.keys())
 
     @property
-    def jobs(self):
+    def jobs(self) -> List[JenkinsJob]:
         return list(self.jenkins_jobs.values())
 
     @property
-    def view_names(self):
+    def view_names(self) -> List[str]:
         return list(self.jenkins_views.keys())
 
     @property
-    def views(self):
+    def views(self) -> List[JenkinsView]:
         return list(self.jenkins_views.values())
 
-    def save_connection_config(self):
+    def save_connection_config(self) -> None:
         if self.name and self.url:
             config_parser = RawConfigParser()
             config_parser.add_section(SECTION_TITLE)
@@ -133,7 +132,7 @@ class JenkinsConnection:
             raise ConfigError('No data to save in JenkinsConnection config file.')
 
     @staticmethod
-    def load_connection_config(jenkins_manager, connection_name):
+    def load_connection_config(jenkins_manager: 'JenkinsManager', connection_name: str) -> None:
         config_file = build_config_file(jenkins_connections_dir, connection_name)
         if os.path.isfile(config_file):
             config_parser = RawConfigParser()
@@ -160,7 +159,7 @@ class JenkinsConnection:
         else:
             'No config file for {}.'.format(connection_name)
 
-    def download_jobs(self, view_name=None):
+    def download_jobs(self, view_name: str = None) -> None:
         print('Warning: Argus uses threading to download Jenkins data.')
         print('Please do not shutdown while jobs are downloading.')
         time.sleep(2)
@@ -190,8 +189,7 @@ class JenkinsConnection:
         workers.run()
         print('Update complete. Found {} new jobs and updated {} jobs.'.format(new_jobs, updated_jobs))
 
-    def download_job_worker(self, job_name, job_num, total_jobs):
-        # type: (str, int, int) -> None
+    def download_job_worker(self, job_name: str, job_num: int, total_jobs: int) -> None:
         """
         Download a single job. For use with threading.
         :param job_name: Name of the job to be downloaded
@@ -205,11 +203,10 @@ class JenkinsConnection:
             jenkins_job = JenkinsJob(job_name, builds)
             jenkins_job_name = jenkins_job.name
             self.jenkins_jobs[jenkins_job_name] = jenkins_job
-        except UnknownJob:
+        except custom_exceptions.UnknownJob:
             sys.stdout.write('Job not found, please try again.\n')
 
-    def needs_update(self, job_name):
-        # type: (str) -> bool
+    def needs_update(self, job_name: str) -> bool:
         """
         :param job_name: Name of the job to be checked for updates
         :return: True if a job needs to be updated, else False
@@ -222,8 +219,7 @@ class JenkinsConnection:
                 return True
         return False
 
-    def download_single_job(self, job_name):
-        # type: (str) -> bool
+    def download_single_job(self, job_name: str) -> bool:
         """
         Download a single job. Not to be used with threading.
         :param job_name: Name of the job to be downloaded
@@ -236,13 +232,12 @@ class JenkinsConnection:
             jenkins_job_name = jenkins_job.name
             self.jenkins_jobs[jenkins_job_name] = jenkins_job
             return True
-        except UnknownJob:
+        except custom_exceptions.UnknownJob:
             print('Job not found, please try again.')
             return False
 
     @staticmethod
-    def print_job_report(job_list):
-        # type: (List[JenkinsJob]) -> None
+    def print_job_report(job_list: List[JenkinsJob]) -> None:
         clear()
         format_str = '{:<5}{:<60}{:<25}{:<25}{:<15}{:<30}{:<25}'
         separator = ('-' * len(format_str.format('', '', '', '', '', '', '')))
@@ -259,8 +254,7 @@ class JenkinsConnection:
         print(separator)
 
     @staticmethod
-    def sort_jobs(jobs):
-        # type: (List[JenkinsJob]) -> List[JenkinsJob]
+    def sort_jobs(jobs: List[JenkinsJob]) -> List[JenkinsJob]:
         sorted_by_name = sorted(jobs, key=lambda j: j.name.lower())
         sort_type = pick_value('Sort jobs by:', ['Name', 'Health'], allow_exit=False, sort=False)
         if sort_type == 'Health':
@@ -275,8 +269,7 @@ class JenkinsConnection:
         return sorted_jobs
 
     @staticmethod
-    def print_test_report(tests):
-        # type: (List[JenkinsTest]) -> None
+    def print_test_report(tests: List[JenkinsTest]) -> None:
         clear()
         format_str = '{:<5}{:<130}{:<30}{:<25}'
         separator = ('-' * len(format_str.format('', '', '', '')))

@@ -18,17 +18,17 @@ from configparser import RawConfigParser
 from getpass import getpass
 
 from requests.exceptions import ConnectionError, HTTPError, MissingSchema
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from src.jenkins_connection import JenkinsConnection
-from src.jenkins_job import JenkinsJob
+from src.jenkins_job import JenkinsJob, JenkinsTest
 from src.jenkins_report import JenkinsReport
 from src.utils import (Config, ConfigError, display_results, get_connection_name, get_input, is_yes,
                        jenkins_conf_file, jenkins_data_dir, jenkins_views_dir,
                        pause, pick_value, save_argus_config)
 
 if TYPE_CHECKING:
-    from typing import Dict, List
+    from src.main_menu import MainMenu
 
 
 class JenkinsManager:
@@ -37,11 +37,11 @@ class JenkinsManager:
     Helper class to build Jenkins test reports
     """
 
-    def __init__(self, main_menu):
-        self._jenkins_branches = Config.JENKINS_BRANCHES
-        self._builds_to_check = 50
-        self._max_results = 20
-        self._main_menu = main_menu
+    def __init__(self, main_menu: 'MainMenu') -> None:
+        self._jenkins_branches = Config.JENKINS_BRANCHES  # type: List[str]
+        self._builds_to_check = 50  # type: int
+        self._max_results = 20  # type: int
+        self._main_menu = main_menu  # type: 'MainMenu'
 
         # Map of connection_names -> jenkins_connections
         self.jenkins_connections = {}  # type: Dict[str, JenkinsConnection]
@@ -50,30 +50,35 @@ class JenkinsManager:
         self.jenkins_reports = {}  # type: Dict[str, JenkinsReport]
 
         # Currently active Jenkins connection
-        self.active_connection = None  # type: JenkinsConnection
+        # TODO: Change this to key off name, decouple from menu interface
+        try:
+            self.active_connection = JenkinsConnection('uninit', 'uninit')  # type: Optional[JenkinsConnection]
+        except Exception as e:
+            print('Cannot set active connection in Jenkins Manager. ConnectionError: {}'.format(e))
 
         # Currently active Jenkins report
-        self.active_report = None  # type: JenkinsReport
+        # TODO: Change this to key off name, decouple from menu interface
+        self.active_report = JenkinsReport('uninit')  # type: JenkinsReport
 
         self.load_jenkins_config()
 
     @property
-    def connection_names(self):
+    def connection_names(self) -> List[str]:
         return list(self.jenkins_connections.keys())
 
     @property
-    def connections(self):
+    def connections(self) -> List[JenkinsConnection]:
         return list(self.jenkins_connections.values())
 
     @property
-    def report_names(self):
+    def report_names(self) -> List[str]:
         return list(self.jenkins_reports.keys())
 
     @property
-    def reports(self):
+    def reports(self) -> List[JenkinsReport]:
         return list(self.jenkins_reports.values())
 
-    def load_jenkins_config(self):
+    def load_jenkins_config(self) -> None:
         if os.path.exists(jenkins_conf_file):
             config_parser = RawConfigParser()
             config_parser.read(jenkins_conf_file)
@@ -98,7 +103,7 @@ class JenkinsManager:
                     for report_name in report_names:
                         JenkinsReport.load_report_config(self, report_name)
 
-    def save_jenkins_config(self):
+    def save_jenkins_config(self) -> None:
         config_parser = RawConfigParser()
 
         if os.path.exists(jenkins_conf_file):
@@ -120,7 +125,7 @@ class JenkinsManager:
 
         save_argus_config(config_parser, jenkins_conf_file)
 
-    def load_job_data(self, file_name):
+    def load_job_data(self, file_name: str) -> Optional[JenkinsConnection]:
         try:
             with open(file_name, 'rb') as data_file:
                 connection_name = get_connection_name(data_file.name)
@@ -141,7 +146,7 @@ class JenkinsManager:
         print('Loaded connection [{}] with {} jobs cached.'.format(jenkins_connection.name, len(jenkins_connection.jenkins_jobs)))
         return jenkins_connection
 
-    def select_active_connection(self):
+    def select_active_connection(self) -> None:
         if self.jenkins_connections:
             connection_name = pick_value('Which Jenkins connection would you like to open?', self.connection_names)
             if connection_name:
@@ -153,7 +158,7 @@ class JenkinsManager:
                 self.active_connection = self.get_connection(self.connection_names[0])
                 self._main_menu.go_to_jenkins_connection_menu()
 
-    def select_active_report(self):
+    def select_active_report(self) -> None:
         if self.jenkins_reports:
             report_name = pick_value('Which custom report would you like to open?', self.report_names)
             if report_name:
@@ -165,7 +170,7 @@ class JenkinsManager:
                 self.active_report = self.get_custom_report(self.report_names[0])
                 self._main_menu.go_to_jenkins_report_menu()
 
-    def add_custom_report(self):
+    def add_custom_report(self) -> None:
         report_name = get_input('Enter a name for this custom report, or enter nothing to exit.\n>', lowered=False)
         if report_name:
             report = JenkinsReport(report_name)
@@ -177,7 +182,7 @@ class JenkinsManager:
             self.active_report = self.get_custom_report(report_name)
             self._main_menu.go_to_jenkins_report_menu()
 
-    def remove_custom_report(self):
+    def remove_custom_report(self) -> None:
         report_name = pick_value('Which custom report would you like to remove?', list(self.jenkins_reports.keys()))
         if report_name:
             self.jenkins_reports.pop(report_name)
@@ -185,7 +190,7 @@ class JenkinsManager:
             print('Successfully removed custom report: {}'.format(report_name))
             pause()
 
-    def add_custom_report_job(self):
+    def add_custom_report_job(self) -> None:
         if self.connection_names:
             connection_name = pick_value('Which Jenkins Connection would you like to add jobs from?', self.connection_names)
             if connection_name:
@@ -206,10 +211,13 @@ class JenkinsManager:
                         break
         else:
             if is_yes('No Jenkins connections to add jobs from. Would you like to add one now?'):
-                self.active_connection = self.add_connection()
+                added = self.add_connection()
+                if added is None:
+                    return
+                self.active_connection = added
                 self._main_menu.go_to_jenkins_connection_menu()
 
-    def remove_custom_report_job(self):
+    def remove_custom_report_job(self) -> None:
         if self.active_report.job_names:
             job_options = self.active_report.job_names
 
@@ -231,13 +239,13 @@ class JenkinsManager:
             print('No Jenkins jobs to remove from report.')
             pause()
 
-    def list_custom_reports(self):
+    def list_custom_reports(self) -> None:
         if self.jenkins_reports:
             display_results(self.report_names)
         else:
             print('No Jenkins reports to display.')
 
-    def view_custom_report(self):
+    def view_custom_report(self) -> None:
         if self.active_report.job_names:
             job_list = self.active_report.get_job_list(self)
             self.print_job_options(job_list)
@@ -245,7 +253,7 @@ class JenkinsManager:
             if is_yes('Attempted to run report with no jobs. Would you like to add jobs now?'):
                 self.add_custom_report_job()
 
-    def get_custom_report(self, report_name):
+    def get_custom_report(self, report_name: str) -> JenkinsReport:
         if report_name not in list(self.jenkins_reports.keys()):
             raise ConfigError('Failed to get custom report: {}'.format(report_name))
         return self.jenkins_reports[report_name]
@@ -278,7 +286,7 @@ class JenkinsManager:
                 pause()
         return None
 
-    def remove_connection(self):
+    def remove_connection(self) -> None:
         if self.jenkins_connections:
             connection_name = pick_value('Which Jenkins connection would you like to remove?', self.connection_names)
             if connection_name:
@@ -295,12 +303,12 @@ class JenkinsManager:
             print('No Jenkins connections to remove.')
             pause()
 
-    def get_connection(self, connection_name):
+    def get_connection(self, connection_name: str) -> JenkinsConnection:
         if connection_name not in self.connection_names:
             raise ConfigError('Failed to get connection: {}'.format(connection_name))
         return self.jenkins_connections[connection_name]
 
-    def load_connection_from_file(self, file_name):
+    def load_connection_from_file(self, file_name: str) -> Optional[JenkinsConnection]:
         try:
             with open(file_name, 'r') as data_file:
                 connection_name = data_file.readline().rstrip()
@@ -321,13 +329,13 @@ class JenkinsManager:
         print('Loaded connection [{}] with {} jobs cached.'.format(jenkins_connection.name, len(jenkins_connection.jenkins_jobs)))
         return jenkins_connection
 
-    def list_connections(self):
+    def list_connections(self) -> None:
         if self.jenkins_connections:
             display_results(self.connection_names)
         else:
             print('No Jenkins connections to display.')
 
-    def download_jobs(self):
+    def download_jobs(self) -> None:
         download_method = pick_value('Would you like to download jobs by view or individually?',
                                      ['By View', 'Individually'], sort=False)
         if download_method:
@@ -369,7 +377,7 @@ class JenkinsManager:
                         print('Failed to download Jenkins job: {}'.format(job_name))
                         pause()
 
-    def view_cached_jobs(self):
+    def view_cached_jobs(self) -> None:
         if self.active_connection.job_names:
             view_options = sorted(self.active_connection.view_names)
             all_jobs = '* All Jobs'
@@ -391,7 +399,7 @@ class JenkinsManager:
             if is_yes('There are no cached jobs for the current connection. Would you like to download jobs now?'):
                 self.download_jobs()
 
-    def view_num_jobs(self):
+    def view_num_jobs(self) -> None:
         """
         Displays the number of jobs cached locally and the total number of jobs on the server.
         """
@@ -399,9 +407,9 @@ class JenkinsManager:
         print('Jobs on server: {}'.format(len(self.active_connection.jenkins_obj.get_jobs_list())))
         pause()
 
-    def print_job_options(self, jobs, connection=False):
-        # type: (List[JenkinsJob], bool) -> None
+    def print_job_options(self, jobs: List[JenkinsJob], connection: bool = False) -> None:
         # this is a terrible way of doing this
+        # TODO: Make this unterrible
         sorted_jobs = JenkinsConnection.sort_jobs(jobs)
         if connection:
             self.active_connection.print_job_report(sorted_jobs)
@@ -434,7 +442,7 @@ class JenkinsManager:
                 print('Invalid selection, please try again.')
 
     @staticmethod
-    def print_test_options(tests):
+    def print_test_options(tests: List[JenkinsTest]) -> None:
         sorted_tests = JenkinsConnection.sort_tests(tests)
         JenkinsConnection.print_test_report(sorted_tests)
 
@@ -451,7 +459,7 @@ class JenkinsManager:
             else:
                 print('Invalid selection, please try again.')
 
-    def add_view(self):
+    def add_view(self) -> None:
         view_name = pick_value('Which Jenkins view would you like to save?', self.active_connection.get_list_of_views())
         if view_name:
             if view_name == 'Dev':
@@ -473,7 +481,7 @@ class JenkinsManager:
                 print('Successfully downloaded jobs for view: {}'.format(view_name))
                 pause()
 
-    def remove_view(self):
+    def remove_view(self) -> None:
         if self.active_connection.jenkins_views:
             view_name = pick_value('Which Jenkins view would you like to remove?', self.active_connection.view_names)
 
@@ -495,7 +503,7 @@ class JenkinsManager:
         else:
             print('No Jenkins views to remove.')
 
-    def list_views(self):
+    def list_views(self) -> None:
         if self.active_connection.jenkins_views:
             display_results(self.active_connection.view_names)
         else:
