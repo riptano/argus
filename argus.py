@@ -39,9 +39,10 @@ parser.add_option('-c', '--triage_csv', help='Specifies local file containing [l
 parser.add_option('-o', '--triage_out', help='Output file name for updated triage data. If not provided, prints to stdout.')
 parser.add_option('-u', '--unit_test', help='Unit testing mode, does not connect servers, saves config changes to test/ folder', action='store_true', dest='unit_test')
 parser.add_option('-v', '--verbose', help='Log verbose debug output to console and argus.log', action='store_true', dest='verbose')
-parser.add_option('-x', '--experiment', help='Run a specific dev experiment (JiraManager.run_debug())', action='store_true', dest='Debug')
+parser.add_option('-x', '--experiment', help='Run with extra / experiment menu option for debug work', action='store_true', dest='experiment')
 parser.add_option('-w', '--web_server', help='Run in WebServer mode', action='store_true', dest='web_server')
 parser.add_option('-i', '--interactive', help='Default mode: run interactive console menu', action='store_true', dest='interactive')
+parser.add_option('-s', '--skip', help='Skip JiraConnection/JiraProject cached updates on startup.', action='store_true', dest='skip_update')
 
 optvalues = optparse.Values()
 (options, arguments) = parser.parse_args(sys.argv[1:], values=optvalues)
@@ -60,8 +61,14 @@ else:
     while Config.MenuPass == '':
         Config.MenuPass = getpass('Enter Argus Password (local JIRA credentials will be encrypted with this):')
 
+if hasattr(options, 'experiment'):
+    Config.Experiment = True
+
+if hasattr(options, 'skip_update'):
+    Config.SkipUpdate = True
+
 # Init logic / containers to pass to menu or to web server
-team_manager = TeamManager()
+team_manager = TeamManager.from_file()
 jira_manager = JiraManager(team_manager)
 
 # TODO: Flip between web server mode and interactive

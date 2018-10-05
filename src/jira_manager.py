@@ -30,7 +30,7 @@ from src.jira_issue import JiraIssue
 from src.jira_view import JiraView
 from src.utils import (ConfigError, argus_debug, clear, get_input, is_empty,
                        is_yes, jira_conf_file, pause, pick_value, print_separator,
-                       save_argus_config, jira_project_dir)
+                       save_argus_config, jira_project_dir, Config)
 
 if TYPE_CHECKING:
     from src.team_manager import TeamManager
@@ -133,7 +133,11 @@ class JiraManager:
                         print('Did not add JiraConnection, so cannot link and use JiraProject.')
                         continue
                 print('Updating with new data from JIRA instance')
-                new_jira_project.refresh()
+                if Config.SkipUpdate:
+                    print('Skipping initial update due to -s flag.')
+                else:
+                    new_jira_project.refresh()
+
                 new_jira_project.jira_connection.add_and_link_jira_project(new_jira_project)
             except (configparser.NoSectionError, ConfigError) as e:
                 print('WARNING! Encountered error initializing JiraProject from file {}: {}'.format(full_path, e))
@@ -410,11 +414,52 @@ class JiraManager:
                 pause()
 
     def run_debug(self) -> None:
-        """
-        Used during development to bypass complex menu operations and try out a single new operation outside unit testing
-        """
-        print('TEST: [{:{width}.{width}}]'.format('I am testing a 5.5 thing', width=5))
-        pause()
+        while True:
+            print_separator(80)
+            print('Debug menu:')
+            print('t: print a specific ticket\'s data')
+            print('l: list custom fields for a JiraProject')
+            print('r: (run current transient) - test print width formatting stuff')
+            print('q: quit back to main menu')
+            print_separator(80)
+            menu_choice = get_input(':')
+            if menu_choice == 't':
+                ticket_name = get_input('Print what ticket? Note: this will fail unless you\'ve cached this project locally:', lowered=False)
+                project_name = JiraIssue.get_project_from_ticket(ticket_name)
+
+                if project_name == '' or project_name is None:
+                    print('Failed to parse project name from ticket: {}. Try again.'.format(ticket_name))
+                    continue
+
+                jira_project = self.maybe_get_cached_jira_project_no_url(project_name)
+                if jira_project is None:
+                    print('Could not find cached version of {}. Add via project menu and try again.'.format(project_name))
+                    continue
+
+                ticket = jira_project.get_issue(ticket_name)
+                if ticket is None:
+                    print('Failed to get jira issue {} from project {}. Are you sure it is correct and/or cached?'.format(ticket_name, project_name))
+                    continue
+
+                if jira_project.jira_connection is not None:
+                    print('Ticket: {}'.format(ticket.pretty_print(jira_project.jira_connection)))
+            elif menu_choice == 'r':
+                print('TEST: [{:{width}.{width}}]'.format('I am testing a 5.5 thing', width=5))
+            elif menu_choice == 'l':
+                jira_connection = self.pick_jira_connection('Show fields for project on which connection?')
+                if jira_connection is None:
+                    print('Nothing selected. Continuing.')
+                    continue
+                project = self.get_jira_connection(jira_connection.connection_name).pick_and_get_jira_project()
+                if project is not None:
+                    print('Showing custom fields for project: {}'.format(project.project_name))
+                    for key, value in project._custom_fields:
+                        print('Key: {}. Value: {}'.format(key, value))
+            elif menu_choice == 'q':
+                break
+            else:
+                print('Bad choice. Try again.')
+            pause()
 
     def search_projects(self) -> None:
         """
@@ -699,6 +744,17 @@ class JiraManager:
         for jira_connection in list(self._jira_connections.values()):
             if jira_connection.url == url:
                 return jira_connection.maybe_get_cached_jira_project(project_name)
+        return None
+
+    def maybe_get_cached_jira_project_no_url(self, project_name: str) -> Optional[JiraProject]:
+        """
+        Doesn't match on url, just returns whichever connection has the first matching project name.
+        """
+        # TODO: This will require rethinking / checking for duplication if we ever support duplicate JiraProject names
+        for jira_connection in list(self._jira_connections.values()):
+            maybe_project = jira_connection.maybe_get_cached_jira_project(project_name)
+            if maybe_project:
+                return maybe_project
         return None
 
     def cache_new_jira_project_data(self) -> None:

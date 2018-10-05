@@ -62,7 +62,7 @@ class JiraConnection:
             if utils.unit_test:
                 self._wrapped_jira_connection = TestWrappedJiraConnectionStub()
             else:
-                self._wrapped_jira_connection = JIRA(basic_auth=(self._user, self._pass), options={'server': self._url})
+                self._wrapped_jira_connection = JIRA(server=self._url, basic_auth=(self._user, self._pass))
         except JIRAError as je:
             if '401' in str(je.response):
                 print('Received HTTP 401 response. Likely a mistyped local argus password. Try again.')
@@ -214,7 +214,6 @@ class JiraConnection:
 
     def _refresh_project_names(self) -> None:
         # Cache project names locally within this object
-        print('Querying project names from {}'.format(self.connection_name))
         projects = []  # type: List[Project]
         if self._wrapped_jira_connection is not None:
             projects = self._wrapped_jira_connection.projects()
@@ -222,7 +221,6 @@ class JiraConnection:
         for p in projects:
             if 'deprecated' not in p.name:
                 self.possible_projects.append(p.key)
-        print('Added {} projects to connection: {}'.format(len(self.possible_projects), self.connection_name))
 
         if len(self.possible_projects) == 0:
             print('No projects found in {}.'.format(self.connection_name))
@@ -246,6 +244,12 @@ class JiraConnection:
         new_project.refresh()
         new_project.save_config()
         self._cached_jira_projects[project_name] = new_project
+
+    def pick_and_get_jira_project(self) -> Optional[JiraProject]:
+        project_name = self.pick_project()
+        if project_name is None:
+            return None
+        return self.maybe_get_cached_jira_project(project_name)
 
     def maybe_get_cached_jira_project(self, project_name: str) -> Optional[JiraProject]:
         if project_name not in self._cached_jira_projects:

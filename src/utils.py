@@ -297,6 +297,8 @@ class Config:
     else:
         Browser = 'google-chrome'
     MenuPass = ''
+    SkipUpdate = False
+    Experiment = False
 
     @classmethod
     def init_argus(cls) -> None:
@@ -400,6 +402,17 @@ def argus_debug(value: str) -> None:
         if argus_log is None:
             return
         argus_log.write(str(value.encode('utf-8')) + os.linesep)
+
+
+def as_int(value: str) -> Optional[int]:
+    if value == '':
+        return None
+    try:
+        result = int(value)
+        return result
+    except (ValueError, TypeError) as e:
+        print('Could not convert {} to int.'.format(value))
+        return None
 
 
 def load_file(tpl: Tuple[Any, Any, Any]) -> None:

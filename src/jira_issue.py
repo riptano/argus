@@ -151,6 +151,10 @@ class JiraIssue(dict):
                     return True
         return False
 
+    @staticmethod
+    def get_project_from_ticket(ticket_name: str) -> str:
+        return ticket_name.split('-')[0]
+
     # ----------------------------------------------------------------------------------------------------
     # Some convenience Accessors
     @property
@@ -163,7 +167,7 @@ class JiraIssue(dict):
 
     @property
     def project_name(self) -> str:
-        return self.issue_key.split('-')[0]
+        return JiraIssue.get_project_from_ticket(self.issue_key)
 
     @property
     def resolved(self) -> Optional[str]:
@@ -299,9 +303,9 @@ class JiraIssue(dict):
         """
         Returns a colon-delimited list of components in this JiraIssue
         """
-        match = re.findall("name='([A-Za-z0-9_ \-]+)'", self['components'])
+        match = re.findall("name='([-A-Za-z0-9_ ]+)'", self['components'])
         # Check for unicode as well
-        matchu = re.findall("name=u'([A-Za-z0-9_ \-]+)'", self['components'])
+        matchu = re.findall("name=u'([-A-Za-z0-9_ ]+)'", self['components'])
 
         return match + matchu
 
@@ -339,6 +343,16 @@ class JiraIssue(dict):
         JiraConnections
         """
         return hash(self.issue_key)
+
+    def pretty_print(self, jira_connection: 'JiraConnection') -> str:
+        result = 'key:{}'.format(self.issue_key)
+        result += os.linesep + '   summary: {}'.format(self['summary'])
+        result += os.linesep + '   assignee: {}'.format(self.assignee)
+        result += os.linesep + '   reviewer: {}'.format(self.get_reviewer(jira_connection))
+        result += os.linesep + '   reviewer2: {}'.format(self.get_value(jira_connection, 'reviewer2'))
+        result += os.linesep + '   status: {}'.format(self.status)
+        result += os.linesep + '   priority: {}'.format(self.priority)
+        return result
 
     def __str__(self) -> str:
         result = 'key:{},'.format(self.issue_key)

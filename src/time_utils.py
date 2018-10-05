@@ -47,7 +47,7 @@ def since(source: datetime, delta: str) -> datetime:
 
 
 def _extract_time(char: str, input: str) -> int:
-    result_match = re.search('([\-0-9]+){}'.format(char), input)
+    result_match = re.search('([-0-9]+){}'.format(char), input)
     if result_match:
         return int(result_match.group(1))
     return 0

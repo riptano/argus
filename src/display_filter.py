@@ -67,7 +67,7 @@ class DisplayFilter:
     @classmethod
     def default(cls):
         df = DisplayFilter()
-        df.include_column(DisplayFilter.RELATIONSHIP_STRING, DisplayFilter.RELATIONSHIP_STRING, 15)
+        # df.include_column(DisplayFilter.RELATIONSHIP_STRING, DisplayFilter.RELATIONSHIP_STRING, 15)
         df.include_column('assignee', 'assignee', 10)
         df.include_column('reviewer', 'reviewer', 10)
         # df.include_column('reviewer2', 10)
@@ -85,7 +85,7 @@ class DisplayFilter:
     @classmethod
     def team_details(cls):
         df = DisplayFilter()
-        df.include_column(DisplayFilter.RELATIONSHIP_STRING, DisplayFilter.RELATIONSHIP_STRING, 15)
+        # df.include_column(DisplayFilter.RELATIONSHIP_STRING, DisplayFilter.RELATIONSHIP_STRING, 15)
         df.include_column('summary', 'summary', 50)
         df.include_column('issuetype', 'type', 6)
         df.include_column('status', 'status', 8)

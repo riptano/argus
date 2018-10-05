@@ -78,11 +78,13 @@ class MainMenu:
             MenuOption('j', 'Jenkins Menu', self.go_to_jenkins_menu, pause=False),
             MenuOption.print_blank_line(),
             MenuOption('o', 'Change Options', self.go_to_options_menu, pause=False),
-            MenuOption('x', 'Debug', self.jira_manager.run_debug, pause=False),
             MenuOption.print_blank_line(),
             MenuOption('h', 'Help', self._display_readme, pause=False),
             MenuOption.quit_program()
         ]
+        if Config.Experiment is True:
+            self.main_menu.append(MenuOption.print_blank_line())
+            self.main_menu.append(MenuOption('x', 'Debug', self.jira_manager.run_debug, pause=False))
 
         self.dashboards_menu = [
             MenuOption('l', 'List all available dashboards', self.jira_manager.list_dashboards),
@@ -207,11 +209,6 @@ class MainMenu:
 
         # let user read startup info
         pause()
-
-        if 'Debug' in options:
-            print('Running Debug')
-            self.jira_manager.run_debug()
-            exit(0)
 
     def go_to_main_menu(self) -> None:
         self.active_menu = self.main_menu
@@ -352,8 +349,8 @@ class MainMenu:
     def signal_handler(signal, frame) -> None:
         # prevent double-print on debug
         if not utils.debug:
-            print('\nShutting down Argus on SigInt.')
-        argus_debug('Shutting down Argus on SigInt.')
+            print('\nShutting down argus on SigInt.')
+        argus_debug('Shutting down argus on SigInt.')
         if utils.argus_log is not None:
             utils.argus_log.close()
         sys.exit(0)

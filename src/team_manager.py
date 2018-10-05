@@ -26,8 +26,8 @@ from src.member_issues_by_status import JiraUserName, MemberIssuesByStatus
 from src.team import Team
 from src.team_reports import (ReportCurrentLoad, ReportFilter, ReportFixVersion, ReportMeta, ReportMomentum,
                               ReportReviewLoad, ReportTestLoad, ReportType)
-from src.utils import (clear, conf_dir, get_input, is_yes, pause, pick_value,
-                       print_separator, save_argus_config)
+from src.utils import (as_int, clear, conf_dir, get_input, is_yes, pause, pick_value,
+                       print_separator, save_argus_config, argus_debug)
 
 if TYPE_CHECKING:
     from src.jira_manager import JiraManager
@@ -295,7 +295,7 @@ class TeamManager:
                         report_to_run.since = time_utils.since_now(ReportFilter.get_since())
                     # making mypy happy
                     assert org_name is not None
-                    self._run_org_report(org_name, report_to_run)
+                    self._run_org_report(jira_manager, org_name, report_to_run)
                     pause()
             except (ValueError, TypeError) as e:
                 print('Error on input: {}. Try again'.format(e))
@@ -386,25 +386,51 @@ class TeamManager:
         for member in team_members:
             member.sort_tickets()
 
-    def _run_org_report(self, org_name: str, report_filter: ReportFilter) -> None:
-        # Print out a menu of the meta information for this report
-        print_separator(40)
-        report_filter.print_description()
-        print_separator(40)
-        print('Report for org: {}'.format(org_name))
-        print('[{}]'.format(report_filter.header))
+    def _run_org_report(self, jira_manager: 'JiraManager', org_name: str, report_filter: ReportFilter) -> None:
+        """
+        Spins within a menu to pull up details on individuals.
+        """
+        while True:
+            # Print out a menu of the meta information for this report
+            print_separator(40)
+            report_filter.print_description()
+            print_separator(40)
+            print('Report for org: {}'.format(org_name))
+            print('[{}]'.format(report_filter.header))
 
-        for team_name in self._organizations[org_name]:
-            team = self._teams[team_name]
-            print('[Team: {}]'.format(team_name))
-            print(report_filter.column_headers())
-            sorted_member_issues = sorted(team.members, key=lambda s: s.primary_name.user_name)
+            count = 1
+            # Store displayed order at top level, sorted on per-team basis
+            meta_sorted_issues = []
+            for team_name in self._organizations[org_name]:
+                print_separator(30)
+                print('[Team: {}]'.format(team_name))
+                print(report_filter.column_headers())
+                team_members = self._teams[team_name].members
+                sorted_members = sorted(team_members, key=lambda s: s.primary_name.user_name)
+                meta_sorted_issues.extend(sorted_members)
 
-            for member_issues in sorted_member_issues:
-                report_filter.clear()
-                # We perform pre-processing and one-off prompting for time duration in .process call
-                report_filter.process_issues(member_issues)
-                print('{}'.format(report_filter.print_all_counts(member_issues.primary_name.user_name)))
+                # Display in sorted order per team.
+                for member_issues in sorted_members:
+                    report_filter.clear()
+                    # We perform pre-processing and one-off prompting for time duration in .process call
+                    report_filter.process_issues(member_issues)
+                    print('{:5}: {}'.format(count, report_filter.print_all_counts(member_issues.primary_name.user_name)))
+                    count += 1
+
+            selection = get_input('[#] to open details for a team member, [q] to return to previous menu')
+            if selection == 'q':
+                break
+            int_sel = as_int(selection)
+            if int_sel is None:
+                continue
+
+            # 0 indexed on List
+            int_sel -= 1
+            if int_sel > len(meta_sorted_issues) or int_sel < 0:
+                print('Bad value.')
+                continue
+            tickets = meta_sorted_issues[int_sel]
+            TeamManager._print_member_details(jira_manager, tickets, report_filter)
 
     @staticmethod
     def _run_report(jira_manager: 'JiraManager', team: Team, report_filter: ReportFilter) -> None:
@@ -438,47 +464,53 @@ class TeamManager:
                 cmd = get_input('[#] Integer value to see a detailed breakdown by category. [q] to return to menu:')
                 if cmd == 'q':
                     break
-
-                # Received detailed breakdown input
-                try:
-                    c_input = int(cmd) - 1
-
-                    # Pull out the MemberIssuesByStatus object for the chosen member for detailed printing
-                    # We need to re-populate this report filter with this user for matching logic to work
-                    full_member_issues = sorted_member_issues[c_input]
-                    report_filter.clear()
-                    report_filter.process_issues(full_member_issues)
-                    displayed_issues = full_member_issues.display_member_issues(jira_manager, report_filter)
-
-                    while True:
-                        if len(displayed_issues) == 0:
-                            print('No issues found matching category.')
-                            pause()
-                            break
-                        cmd = get_input('[#] Integer value to open JIRA issue in browser. [q] to return to report results:')
-                        if cmd == 'q':
-                            break
-                        try:
-                            jira_issue = displayed_issues[int(cmd) - 1]
-                            jira_connection = jira_manager.get_jira_connection(jira_issue.jira_connection_name)
-                            JiraUtils.open_issue_in_browser(jira_connection.url, jira_issue.issue_key)
-                        except ValueError as ve:
-                            print('Bad input. Try again.')
-                            print('ValueError : {}'.format(ve))
-                            pause()
-                except ValueError:
+                selection = as_int(cmd)
+                if selection is None:
                     break
+
+                selection -= 1
+                if selection < 0 or selection > len(sorted_member_issues):
+                    print('Bad Selection.')
+                    continue
+                full_member_issues = sorted_member_issues[selection]
+                TeamManager._print_member_details(jira_manager, full_member_issues, report_filter)
         except JIRAError as je:
             print('Caught a JIRAError attempting to run a query: {}'.format(je))
             pause()
 
+    @staticmethod
+    def _print_member_details(jira_manager: 'JiraManager', tickets: MemberIssuesByStatus, report_filter: ReportFilter) -> None:
+        # We need to re-populate this report filter with this user for matching logic to work
+        report_filter.clear()
+        report_filter.process_issues(tickets)
+        displayed_issues = tickets.display_member_issues(jira_manager, report_filter)
+
+        while True:
+            if len(displayed_issues) == 0:
+                print('No issues found matching category.')
+                pause()
+                break
+            cmd = get_input('[#] Integer value to open JIRA issue in browser. [q] to return to report results:')
+            if cmd == 'q':
+                break
+            try:
+                jira_issue = displayed_issues[int(cmd) - 1]
+                jira_connection = jira_manager.get_jira_connection(jira_issue.jira_connection_name)
+                JiraUtils.open_issue_in_browser(jira_connection.url, jira_issue.issue_key)
+            except ValueError as ve:
+                print('Bad input. Try again.')
+                print('ValueError : {}'.format(ve))
+                pause()
+
     @classmethod
     def from_file(cls) -> 'TeamManager':
+        print('Loading Team config from file')
         config_parser = configparser.RawConfigParser()
         try:
             result = TeamManager()
 
             if not os.path.exists(os.path.join(conf_dir, 'teams.cfg')):
+                argus_debug('Did not find any existing conf/teams.cfg file. Empty TeamManager.')
                 return result
 
             config_parser.read(os.path.join(conf_dir, 'teams.cfg'))
@@ -492,6 +524,7 @@ class TeamManager:
                         continue
                     name, jira_connection_name = team_root.split(':')
                     result._teams[name] = Team(name, jira_connection_name)
+                    argus_debug('TeamManager.init: Adding team: {} from config'.format(name))
 
             # Add MemberIssuesByStatus
             for member_root_name in config_parser.sections():
@@ -503,6 +536,7 @@ class TeamManager:
                 if team is None:
                     raise ValueError('Failed to find a constructed team with name: {}'.format(new_member.primary_team))
                 team.add_existing_member(new_member)
+                argus_debug('TeamManager init: Adding team member: {}'.format(new_member.full_name))
 
             # Init Orgs
             if config_parser.has_section('organizations'):

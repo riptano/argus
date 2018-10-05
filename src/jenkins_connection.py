@@ -57,7 +57,9 @@ class JenkinsConnection:
             self._requires_auth = True
             username = self._auth['username']
             password = self._auth['password']
-            self.jenkins_obj = self.create_jenkins_obj(self.url, username, password)
+            # Default creation is for 'uninit' JC
+            if connection_name != 'uninit':
+                self.jenkins_obj = self.create_jenkins_obj(self.url, username, password)
         else:
             self._auth = {}
             self._requires_auth = False

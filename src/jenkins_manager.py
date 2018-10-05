@@ -52,7 +52,7 @@ class JenkinsManager:
         # Currently active Jenkins connection
         # TODO: Change this to key off name, decouple from menu interface
         try:
-            self.active_connection = JenkinsConnection('uninit', 'uninit')  # type: Optional[JenkinsConnection]
+            self.active_connection = JenkinsConnection('uninit', 'uninit')  # type: JenkinsConnection
         except Exception as e:
             print('Cannot set active connection in Jenkins Manager. ConnectionError: {}'.format(e))
 
