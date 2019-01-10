@@ -708,6 +708,9 @@ class JiraManager:
             except ValueError:
                 print('Bad input. Try again.')
 
+    def add_single_user_report(self) -> None:
+        pass
+
     def _prompt_connection_add_if_none(self) -> bool:
         """
         :return: True if either a new connection is added or connections already exist

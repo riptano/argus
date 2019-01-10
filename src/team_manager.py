@@ -24,9 +24,9 @@ from src import time_utils
 from src.jira_utils import JiraUtils
 from src.member_issues_by_status import JiraUserName, MemberIssuesByStatus
 from src.team import Team
-from src.team_reports import (ReportCurrentLoad, ReportFilter, ReportFixVersion, ReportMeta, ReportMomentum,
-                              ReportReviewLoad, ReportTestLoad, ReportType)
-from src.utils import (as_int, clear, conf_dir, get_input, is_yes, pause, pick_value,
+from src.team_reports import (InProgressReport, ReportCurrentLoad, ReportFilter, ReportFixVersion, ReportMeta,
+                              ReportMomentum, ReportReviewLoad, ReportTestLoad, ReportType)
+from src.utils import (as_int, build_separator, clear, conf_dir, get_input, is_yes, pause, pick_value,
                        print_separator, save_argus_config, argus_debug)
 
 if TYPE_CHECKING:
@@ -46,7 +46,8 @@ class TeamManager:
         ReportType.TEST_LOAD: ReportTestLoad(),
         ReportType.REVIEW_LOAD: ReportReviewLoad(),
         ReportType.FIXVERSION: ReportFixVersion(),
-        ReportType.META: ReportMeta()
+        ReportType.META: ReportMeta(),
+        ReportType.IN_PROGRESS: InProgressReport()
     }
 
     def __init__(self) -> None:
@@ -344,7 +345,7 @@ class TeamManager:
                     pause()
                 else:
                     assert selected_team is not None
-                    TeamManager._run_report(jira_manager, selected_team, TeamManager.reports[report_type])
+                    TeamManager._run_team_report(jira_manager, selected_team, TeamManager.reports[report_type])
             except (ValueError, TypeError) as e:
                 print('Error on input: {}. Try again'.format(e))
                 traceback.print_exc()
@@ -358,6 +359,7 @@ class TeamManager:
         print('{}: Review load report: snapshot of currently assigned reviews, Patch Available reviews, and finished reviews in a custom time frame'.format(ReportType.REVIEW_LOAD))
         print('{}: FixVersion report: show data for all tickets on a fixversion over time frame'.format(ReportType.FIXVERSION))
         print('{}: Meta report: show data for meta workload for a team'.format(ReportType.META))
+        print('{}: In Progress report: show all open tickets marked "In Progress" for each user'.format(ReportType.IN_PROGRESS))
 
     @staticmethod
     def populate_owned_jira_issues(jira_manager: 'JiraManager', team_members: List[MemberIssuesByStatus]) -> None:
@@ -401,21 +403,26 @@ class TeamManager:
             count = 1
             # Store displayed order at top level, sorted on per-team basis
             meta_sorted_issues = []
-            for team_name in self._organizations[org_name]:
-                print_separator(30)
-                print('[Team: {}]'.format(team_name))
-                print(report_filter.column_headers())
-                team_members = self._teams[team_name].members
-                sorted_members = sorted(team_members, key=lambda s: s.primary_name.user_name)
-                meta_sorted_issues.extend(sorted_members)
+            with open('last_report.txt', 'w') as fh:
+                for team_name in self._organizations[org_name]:
+                    fh.write('{}{}'.format(build_separator(30), os.linesep))
+                    fh.write('[Team: {}]{}'.format(team_name, os.linesep))
+                    fh.write('{}{}'.format(report_filter.column_headers(), os.linesep))
 
-                # Display in sorted order per team.
-                for member_issues in sorted_members:
-                    report_filter.clear()
-                    # We perform pre-processing and one-off prompting for time duration in .process call
-                    report_filter.process_issues(member_issues)
-                    print('{:5}: {}'.format(count, report_filter.print_all_counts(member_issues.primary_name.user_name)))
-                    count += 1
+                    team_members = self._teams[team_name].members
+                    sorted_members = sorted(team_members, key=lambda s: s.primary_name.user_name)
+                    meta_sorted_issues.extend(sorted_members)
+
+                    # Display in sorted order per team.
+                    for member_issues in sorted_members:
+                        report_filter.clear()
+                        # We perform pre-processing and one-off prompting for time duration in .process call
+                        report_filter.process_raw_issues(member_issues)
+                        report_filter.print_main_data(count, member_issues, fh)
+                        count += 1
+
+            with open('last_report.txt', 'r') as fh:
+                print(fh.read())
 
             selection = get_input('[#] to open details for a team member, [q] to return to previous menu')
             if selection == 'q':
@@ -433,7 +440,7 @@ class TeamManager:
             TeamManager._print_member_details(jira_manager, tickets, report_filter)
 
     @staticmethod
-    def _run_report(jira_manager: 'JiraManager', team: Team, report_filter: ReportFilter) -> None:
+    def _run_team_report(jira_manager: 'JiraManager', team: Team, report_filter: ReportFilter) -> None:
         # We prompt for a new 'since' on each iteration of the loop in non-org reporting
         if report_filter.needs_duration:
             report_filter.since = time_utils.since_now(ReportFilter.get_since())
@@ -444,23 +451,28 @@ class TeamManager:
             sorted_member_issues = sorted(team.members, key=lambda s: s.primary_name.user_name)
 
             while True:
-                # Print out a menu of the meta information for each team member
-                print_separator(40)
-                report_filter.print_description()
-                print_separator(40)
-                print('[{}]'.format(report_filter.header))
-                print(report_filter.column_headers())
+                with open('last_report.txt', 'w') as fh:
+                    # Print out a menu of the meta information for each team member
+                    fh.write('{}{}'.format(build_separator(40), os.linesep))
+                    fh.write('{}{}'.format(report_filter.description, os.linesep))
+                    fh.write('{}{}'.format(build_separator(40), os.linesep))
+                    fh.write('[{}]{}'.format(report_filter.header, os.linesep))
+                    fh.write('{}{}'.format(report_filter.column_headers(), os.linesep))
 
-                count = 1
+                    count = 1
 
-                for member_issues in sorted_member_issues:
-                    report_filter.clear()
-                    # We perform pre-processing and one-off prompting for time duration in .process call
-                    report_filter.process_issues(member_issues)
-                    print('{:5}: {}'.format(count, report_filter.print_all_counts(member_issues.primary_name.user_name)))
-                    count += 1
+                    for member_issues in sorted_member_issues:
+                        report_filter.clear()
+                        # We perform pre-processing and one-off prompting for time duration in .process call
+                        report_filter.process_raw_issues(member_issues)
+                        report_filter.print_main_data(count, member_issues, fh)
+                        count += 1
 
-                print_separator(40)
+                    fh.write('{}{}'.format(build_separator(40), os.linesep))
+
+                with open('last_report.txt', 'r') as fh:
+                    print(fh.read())
+
                 cmd = get_input('[#] Integer value to see a detailed breakdown by category. [q] to return to menu:')
                 if cmd == 'q':
                     break
@@ -482,7 +494,7 @@ class TeamManager:
     def _print_member_details(jira_manager: 'JiraManager', tickets: MemberIssuesByStatus, report_filter: ReportFilter) -> None:
         # We need to re-populate this report filter with this user for matching logic to work
         report_filter.clear()
-        report_filter.process_issues(tickets)
+        report_filter.process_raw_issues(tickets)
         displayed_issues = tickets.display_member_issues(jira_manager, report_filter)
 
         while True:
@@ -542,9 +554,13 @@ class TeamManager:
             if config_parser.has_section('organizations'):
                 for org_name in config_parser.get('organizations', 'org_names').split(','):
                     new_org = set()
-                    for team_name in config_parser.get('organizations', org_name).split(','):
-                        new_org.add(team_name)
-                    result._organizations[org_name] = new_org
+                    try:
+                        for team_name in config_parser.get('organizations', org_name).split(','):
+                            new_org.add(team_name)
+                        result._organizations[org_name] = new_org
+                    except configparser.NoOptionError:
+                        # Expected path if we don't have an org active. Saved as empty
+                        pass
 
             return result
         except (AttributeError, ValueError, IOError) as e:

@@ -28,12 +28,8 @@ class JiraFilter:
     """
     Contains one or many attributes to filter a jira query on.
     Different data requested by the filter is housed here.
-    JiraFilters are unique on a per JiraConnection basis, as the alternative would have us querying multiple JiraConnections
-    for matching JiraProject caches to find custom field translation. So long as the relationships remain:
-        1 -> Many JiraDashboard to JiraView
-        1 -> Many JiraConnection to JiraView/JiraDashboard
-        1 -> Many JiraView to JiraFilter
-    we can only have a single JiraConnection associated with any given view.
+    The reason we cache the JiraConnection is that custom field translation depends on metadata from the JiraConnection.
+    To make translation of custom fields not require passing in the JiraConnection, we cache it
     """
 
     def __init__(self,
@@ -99,43 +95,59 @@ class JiraFilter:
         """
         jira_project = self._jira_connection.maybe_get_cached_jira_project(jira_issue.project_name)
         if jira_project is None:
+            argus_debug('jira_project is none. Returning None in _translate_field.')
             return 'None'
         argus_debug('JiraFilter: Attempting to translate {} for jira_issue: {}'.format(
             self.field, jira_issue.issue_key))
         return jira_project.translate_custom_field(self.field)
 
-    def _internal_matching_operation(self, jira_issue: 'JiraIssue', to_match: List[str]) -> bool:
+    def _internal_match(self, jira_issue: 'JiraIssue', to_match: List[str]) -> bool:
+        """
+        For a given list of strings to match for (either inclusion list or exclusion from the JiraFilter), determine
+        whether the translated field from the JiraIssue matches that list + taking into account if it matches
+        the AND / OR logic.
+        """
         matches_one = False
         matches_all = True
 
+        # can't match what we don't have
+        if len(to_match) == 0:
+            argus_debug('      We don\'t have any entries for this category - returning False.')
+            return False
+
         translated = self._translate_field(jira_issue)
-        in_issue = translated in jira_issue
-        value = 'Not found'
-        if in_issue:
-            value = jira_issue[translated]
-        argus_debug('Checking for translated field {} in issue: {}. Found: {}. Value: {}. Filter: {}'.format(
-            translated, jira_issue.issue_key, in_issue, value, self))
+        argus_debug('list of possible value matches: {}'.format(to_match))
+        argus_debug('translated value: {}'.format(translated))
 
         if translated in jira_issue:
-            argus_debug('Checking for {} in {}'.format(translated, jira_issue.issue_key))
+            argus_debug('found translated value in jira_issue')
             for match in to_match:
-                argus_debug('Checking against match: {}'.format(match))
                 if match in jira_issue[translated]:
-                    argus_debug('   FOUND MATCH')
                     matches_one = True
                 else:
                     matches_all = False
 
+        argus_debug('matches_one: {} and matches_all: {}'.format(matches_one, matches_all))
+
         if self.query_type() == 'OR':
+            argus_debug('query_type is OR, returning matches_one: {}'.format(matches_one))
             return matches_one
 
-        return matches_one and matches_all
+        argus_debug('query_type not OR, returning matches_all: {}'.format(matches_all))
+        return matches_all
+
+    def matches_jira_issue(self, jira_issue: 'JiraIssue') -> bool:
+        matches = self.includes_jira_issue(jira_issue)
+        argus_debug('   included determined to be: {}'.format(matches))
+        excluded = self.excludes_jira_issue(jira_issue)
+        argus_debug('   excluded determined to be: {}'.format(excluded))
+        return matches and not excluded
 
     def includes_jira_issue(self, jira_issue: 'JiraIssue') -> bool:
-        return self._internal_matching_operation(jira_issue, self._includes)
+        return self._internal_match(jira_issue, self._includes)
 
     def excludes_jira_issue(self, jira_issue: 'JiraIssue') -> bool:
-        return self._internal_matching_operation(jira_issue, self._excludes)
+        return self._internal_match(jira_issue, self._excludes)
 
     def extract_value(self, jira_issue: 'JiraIssue') -> str:
         translated = self._translate_field(jira_issue)

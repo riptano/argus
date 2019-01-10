@@ -19,12 +19,13 @@ echo "Checking health of argus code-base. Please wait..."
 cur_date=`date`
 echo "Health check: $cur_date" > argus_health.txt
 
-echo "$pycmd -m flake8..."
-echo "-----------------------------" >> argus_health.txt
-echo "Running flake8 with pycmd: $pycmd" >> argus_health.txt
-echo "-----------------------------" >> argus_health.txt
-$pycmd -m flake8 --ignore E501,E702,F401,F811,F812,F822,F823,F831,F841,N8,C9 --builtins="function" argus.py >> argus_health.txt 2>&1
-$pycmd -m flake8 --ignore E501,E702,F401,F811,F812,F822,F823,F831,F841,N8,C9 --builtins="function" src/* >> argus_health.txt 2>&1
+# flake8 broken in py 3.6
+# echo "$pycmd -m flake8..."
+# echo "-----------------------------" >> argus_health.txt
+# echo "Running flake8 with pycmd: $pycmd" >> argus_health.txt
+# echo "-----------------------------" >> argus_health.txt
+# $pycmd -m flake8 --ignore E501,E702,F401,F811,F812,F822,F823,F831,F841,N8,C9 --builtins="function" argus.py >> argus_health.txt 2>&1
+# $pycmd -m flake8 --ignore E501,E702,F401,F811,F812,F822,F823,F831,F841,N8,C9 --builtins="function" src/* >> argus_health.txt 2>&1
 
 echo "$pycmd -m pycodestyle..."
 echo "-----------------------------" >> argus_health.txt

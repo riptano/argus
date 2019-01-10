@@ -27,31 +27,30 @@ from src.utils import ConfigError
 if TYPE_CHECKING:
     from src.jira_connection import JiraConnection
     from src.jira_manager import JiraManager
-    from src.jira_project import JiraProject
 
 
 class JiraIssue(dict):
 
     """
-    Decorated dictionary member that contains an issue_key and the name of the jira_connection this JiraIssue belongs to.
-    As the base jira objects coming back from the JIRA library are dict entries, we just decorate them.
+    A decorated dictionary / Jira.Issue object that has a bunch of customization, properties, mappings, and logic in it
     """
 
     # self.version reference:
     #   1: offline cached w/dependency chain resolution
     #      adds [.version: int] and [.is_cached: bool]
 
-    def __init__(self, jira_connection: Optional['JiraConnection'], issue: Issue, **kwargs: Dict) -> None:
+    def __init__(self, jira_connection: 'JiraConnection', issue: Issue, **kwargs: Dict) -> None:
         """
+        We require a JiraConnection per JiraIssue so we can reference it for custom field translations and other lookups
         :exception ConfigError: On deser, if we encounter an unknown conversion from an old version we raise ConfigError.
             All other values are blindly stored in the object, so we may run into corruption that transparently passes
             through here.
         """
         super(JiraIssue, self).__init__(**kwargs)
-        if jira_connection:
-            self.jira_connection_name = jira_connection.connection_name
-        else:
-            self.jira_connection_name = 'None'
+        # Store name only. Ref to JiraConnection means pickle will try and serialize JiraConnections within the object,
+        # and honestly it's less work to pass in a JiraConnection from JiraProject usage context than unwire and re-wire
+        # a ref to a JiraConnection in __get/setattr__ calls for pickle.
+        self.jira_connection_name = jira_connection.connection_name
         self.issue_key = issue.key  # type: str
         self.dependencies = set()  # type: Set[JiraDependency]
         self.version = 1
@@ -114,7 +113,7 @@ class JiraIssue(dict):
         """
         new_issue = Issue(None, None)
         new_issue.key = issue_key
-        result = JiraIssue(None, new_issue)
+        result = JiraIssue(JiraConnection(dummy=True), new_issue)
         result['relationship'] = 'MISSING CHAIN'
         result['summary'] = 'BREAK IN CHAIN. Cache offline to see deps.'
         result.is_cached_offline = False
@@ -123,32 +122,30 @@ class JiraIssue(dict):
         result['resolution'] = None
         return result
 
-    def matches(self, jira_connection: 'JiraConnection', find: str) -> bool:
+    def matches(self, find: str) -> bool:
         """
         Tests all values in the ticket to see if they match the input string.
         Requires input of the JiraConnection you want to compare against to protect against
         duplicate project names across different JIRA instances.
         """
-        if self.jira_connection_name == jira_connection.connection_name:
-            # Test against issue key separately
-            if find in self.issue_key:
+        # Test against issue key separately
+        if find in self.issue_key:
+            return True
+        for value in list(self.values()):
+            if find in value:
                 return True
-            for value in list(self.values()):
-                if find in value:
-                    return True
         return False
 
-    def matches_any(self, jira_connection: 'JiraConnection', to_match: List[str]) -> bool:
+    def matches_any(self, to_match: List[str]) -> bool:
         """
         Batches multiple regex matches for JiraView usage. If regexes is empty, we consider that fully inclusive and matching
         """
         # A touch redundant as we re-check in matches, but should prevent a lot of overchecking on each field
-        if self.jira_connection_name == jira_connection.connection_name:
-            if len(to_match) == 0:
+        if len(to_match) == 0:
+            return True
+        for regex in to_match:
+            if self.matches(regex):
                 return True
-            for regex in to_match:
-                if self.matches(jira_connection, regex):
-                    return True
         return False
 
     @staticmethod
@@ -208,6 +205,10 @@ class JiraIssue(dict):
         return self['resolution']
 
     @property
+    def summary(self) -> Optional[str]:
+        return self['summary']
+
+    @property
     def is_feature(self) -> bool:
         return 'New Feature' == self.issuetype or 'Improvement' == self.issuetype
 
@@ -231,27 +232,23 @@ class JiraIssue(dict):
 
     # ----------------------------------------------------------------------------------------------------
 
+    def reviewer(self, jira_connection: 'JiraConnection') -> Optional[str]:
+        return self.get_value(jira_connection, 'reviewer')
+
+    def reviewer2(self, jira_connection: 'JiraConnection') -> Optional[str]:
+        return self.get_value(jira_connection, 'reviewer2')
+
     def has_fix_version(self, version: str) -> bool:
         return version in self['fixVersions']
 
-    def is_owned_by(self, jira_connection: 'JiraConnection', name: str) -> bool:
-        """
-        Checks fields to see if this issue is owned by the member name passed in, as either assignee or reviewer(2)
-        """
-        return name == self.assignee or self.is_reviewer(jira_connection, name)
-
-    def get_reviewer(self, jira_connection: 'JiraConnection') -> Optional[str]:
-        custom_field = self.translate_custom_field(jira_connection, 'reviewer')
-        return None if custom_field not in self else self[custom_field]
-
-    def is_reviewer(self, jira_connection: 'JiraConnection', name: str) -> bool:
+    def is_reviewer(self, name: str, jira_connection: 'JiraConnection') -> bool:
         """
         Checks if 'reviewer' or 'reviewer2''s custom translation matches the input name
-        :param jira_connection: we need the JiraConnection for per-project custom field translation
+        jira_connection is required since we map to optional fields 'reviewer' or 'reviewer2'
         """
-        return self.matches_field(jira_connection, 'reviewer', name) or self.matches_field(jira_connection, 'reviewer2', name)
+        return self.reviewer(jira_connection) == name or self.reviewer2(jira_connection) == name
 
-    def matches_field(self, jira_connection: 'JiraConnection', field: str, value: str) -> bool:
+    def matches_field(self, field: str, value: str, jira_connection: 'JiraConnection') -> bool:
         """
         Returns whether or not the ticket matches a regex on a given field name.
         Missing a field translates into no match.
@@ -278,22 +275,12 @@ class JiraIssue(dict):
                 return True
         return False
 
-    def get_jira_project(self, jira_connection: 'JiraConnection') -> 'JiraProject':
-        """
-        :exception IOError: if we fail to find locally cached data files for this JiraProject, this will raise an exception.
-        """
+    def get_value(self, jira_connection: 'JiraConnection', field: str) -> Optional[str]:
         jira_project = jira_connection.maybe_get_cached_jira_project(self.project_name)
         if jira_project is None:
-            raise IOError('Failed to find JiraProject {} on JiraConnection {} for issue: {}. Delete the locally cached data and re-download the project.'.format(
-                self.project_name, self.jira_connection_name, self.issue_key))
-        return jira_project
+            return None
 
-    def translate_custom_field(self, jira_connection: 'JiraConnection', field: str) -> str:
-        jira_project = self.get_jira_project(jira_connection)
-        return jira_project.translate_custom_field(field)
-
-    def get_value(self, jira_connection: 'JiraConnection', field: str) -> Optional[str]:
-        field_name = self.translate_custom_field(jira_connection, field)
+        field_name = jira_project.translate_custom_field(field)
         if field_name not in self:
             return None
         return self[field_name]
@@ -348,7 +335,7 @@ class JiraIssue(dict):
         result = 'key:{}'.format(self.issue_key)
         result += os.linesep + '   summary: {}'.format(self['summary'])
         result += os.linesep + '   assignee: {}'.format(self.assignee)
-        result += os.linesep + '   reviewer: {}'.format(self.get_reviewer(jira_connection))
+        result += os.linesep + '   reviewer: {}'.format(self.reviewer(jira_connection))
         result += os.linesep + '   reviewer2: {}'.format(self.get_value(jira_connection, 'reviewer2'))
         result += os.linesep + '   status: {}'.format(self.status)
         result += os.linesep + '   priority: {}'.format(self.priority)

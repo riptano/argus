@@ -17,12 +17,12 @@ from configparser import RawConfigParser
 from typing import Dict, List, Optional, TYPE_CHECKING
 
 from src.display_filter import DisplayFilter
-from src.jira_connection import JiraConnection
 from src.jira_issue import JiraIssue
 from src.jira_utils import JiraUtils
 from src.utils import pick_value
 
 if TYPE_CHECKING:
+    from src.jira_connection import JiraConnection
     from src.jira_manager import JiraManager
     from src.team_reports import ReportFilter
 
@@ -139,7 +139,7 @@ class MemberIssuesByStatus:
     def closed_test_count(self) -> int:
         return len([x for x in self.closed if x.is_test])
 
-    def add_if_owns(self, jira_connection: JiraConnection, jira_issue: JiraIssue) -> bool:
+    def add_if_owns(self, jira_connection: 'JiraConnection', jira_issue: JiraIssue) -> bool:
         """
         Note: this can theoretically leave duplicate JiraIssues in various lists
         Definition of "owns" in this context is: is assignee or reviewer of project
@@ -158,17 +158,17 @@ class MemberIssuesByStatus:
 
         owning_name = owning_jira_name.user_name
         if jira_issue.is_closed:
-            if jira_issue.is_reviewer(jira_connection, owning_name):
+            if jira_issue.is_reviewer(owning_name, jira_connection):
                 self.reviewed.append(jira_issue)
             elif jira_issue.assignee == owning_name:
                 self.closed.append(jira_issue)
         else:
-            if jira_issue.is_reviewer(jira_connection, owning_name):
+            if jira_issue.is_reviewer(owning_name, jira_connection):
                 self.reviewer.append(jira_issue)
             elif jira_issue.assignee == owning_name:
                 self.assigned.append(jira_issue)
             else:
-                print('LOGIC ERROR! owning_name: {} assignee: {} reviewer: {} reviewer2: {}'.format(owning_name, jira_issue.assignee, jira_issue.get_reviewer(jira_connection), jira_issue.get_value(jira_connection, 'reviewer2')))
+                print('LOGIC ERROR! owning_name: {} assignee: {} reviewer: {} reviewer2: {}'.format(owning_name, jira_issue.assignee, jira_issue.reviewer, jira_issue.reviewer2))
                 raise Exception('owning_name is: {} but we did not match assignee nor reviewer on ticket: {}'.format(owning_name, jira_issue.issue_key))
         return True
 
@@ -187,7 +187,7 @@ class MemberIssuesByStatus:
         # TODO: Make this init from a flat config file, debug_issues.txt
         return False
 
-    def get_owning_jira_user_name(self, jira_connection: JiraConnection, jira_issue: JiraIssue) -> Optional[JiraUserName]:
+    def get_owning_jira_user_name(self, jira_connection: 'JiraConnection', jira_issue: JiraIssue) -> Optional[JiraUserName]:
         """
         Determines which, if any, of the JiraUserNames associated with this MemberIssuesByStatus worked on this JiraIssue
         """
@@ -196,7 +196,7 @@ class MemberIssuesByStatus:
                 continue
 
             user_name = jira_user_name.user_name
-            if jira_issue.assignee == user_name or jira_issue.is_reviewer(jira_connection, user_name):
+            if jira_issue.assignee == user_name or jira_issue.is_reviewer(user_name, jira_connection):
                 return jira_user_name
         if self.is_debug_jira_issue(jira_issue):
             print('NO MATCH')

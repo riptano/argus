@@ -17,7 +17,7 @@ Argus provides some key functionality over the existing JIRA web browser or free
 * Dev / Manager straddling 2 JIRAs:
   * [c] - Jira Connection menu, add a 2nd connection beyond the core default
   * [t] - Team menu. Add a linked team member, linking a username on the 2 projects
-  * [r] - Pre-generated reports. Add a [s]ingle user multi-jira report
+  * [r] - Templated reports. Add a [s]ingle user multi-jira report
   * [d] - Dashboard, [d] display dashboard, select the one you just created
     - This should display a dashboard of all open tickets in the multiple JIRA connections in a single dashboard
 

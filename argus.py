@@ -43,6 +43,7 @@ parser.add_option('-x', '--experiment', help='Run with extra / experiment menu o
 parser.add_option('-w', '--web_server', help='Run in WebServer mode', action='store_true', dest='web_server')
 parser.add_option('-i', '--interactive', help='Default mode: run interactive console menu', action='store_true', dest='interactive')
 parser.add_option('-s', '--skip', help='Skip JiraConnection/JiraProject cached updates on startup.', action='store_true', dest='skip_update')
+parser.add_option('-l', '--limit', help='Limit the number of JiraIssues queried from any given project (for debug purposes).')
 
 optvalues = optparse.Values()
 (options, arguments) = parser.parse_args(sys.argv[1:], values=optvalues)
@@ -60,6 +61,9 @@ if hasattr(options, 'password'):
 else:
     while Config.MenuPass == '':
         Config.MenuPass = getpass('Enter Argus Password (local JIRA credentials will be encrypted with this):')
+
+if hasattr(options, 'limit'):
+    Config.JiraLimit = int(options.limit)
 
 if hasattr(options, 'experiment'):
     Config.Experiment = True

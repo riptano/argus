@@ -18,15 +18,17 @@ import traceback
 from typing import TYPE_CHECKING, List, Optional
 
 from src import utils
+from src.jira_filter import JiraFilter
 from src.jira_issue import JiraIssue
 from src.jira_utils import JiraUtils
+from src.jira_view import JiraView
 from src.utils import (ConfigError, argus_debug, jira_data_dir,
                        save_argus_config, jira_project_dir)
 
 if TYPE_CHECKING:
     from src.jira_manager import JiraManager
     from src.jira_connection import JiraConnection
-    from typing import Dict, Optional, List
+    from typing import Dict, Optional, List, Set
 
 
 class JiraProject:
@@ -77,6 +79,9 @@ class JiraProject:
             except KeyError:
                 print('Error pulling updated ts from JiraIssue with key: {}. Skipping.'.format(jira_issue.issue_key))
 
+        self._known_assignees = set()  # type: Set[str]
+        self._known_reviewers = set()  # type: Set[str]
+
         if jira_connection is not None:
             jira_connection.add_and_link_jira_project(self)
         self.add_field_translations_from_file()
@@ -84,6 +89,26 @@ class JiraProject:
     @property
     def url(self) -> str:
         return self._url
+
+    def populate_contributors(self) -> None:
+        """
+        Pulls from all cached JiraIssues to determine all assignees and reviewers
+        """
+        self._known_assignees = set()  # type: Set[str]
+        self._known_reviewers = set()  # type: Set[str]
+
+        for key, issue in self.jira_issues.items():
+            if issue.assignee is not None:
+                self._known_assignees.add(issue.assignee)
+            if self.jira_connection is not None:
+                if issue.reviewer(self.jira_connection) is not None:
+                    to_add = issue.reviewer(self.jira_connection)
+                    if to_add is not None:
+                        self._known_reviewers.add(to_add)
+                if issue.reviewer2(self.jira_connection) is not None:
+                    to_add = issue.reviewer2(self.jira_connection)
+                    if to_add is not None:
+                        self._known_reviewers.add(to_add)
 
     def add_field_translations_from_file(self) -> None:
         """
@@ -195,6 +220,7 @@ class JiraProject:
 
     def save_config(self) -> None:
         # .cfg file
+        argus_debug('jira_project.save_config call.')
         config_parser = configparser.RawConfigParser()
         config_parser.add_section('Config')
         if self.jira_connection is not None:
@@ -266,7 +292,7 @@ class JiraProject:
         results = []
         if self.jira_connection is not None:
             for k, v in self.jira_issues.items():
-                if v.matches(self.jira_connection, search_string):
+                if v.matches(search_string):
                     if search_type == 'o' and v.is_open:
                         results.append(v)
                     elif search_type == 'c' and v.is_closed:
@@ -274,6 +300,22 @@ class JiraProject:
                     elif search_type == 'a':
                         results.append(v)
         return results
+
+    def get_filtered_issues(self, jira_filter: JiraFilter) -> List[JiraIssue]:
+        """
+        Applies a JiraFilter to all issues within this project
+        """
+        results = []  # type: List[JiraIssue]
+        if self.jira_connection is None or len(self.jira_issues) == 0:
+            return results
+
+        for key, jira_issue in self.jira_issues.items():
+            if jira_filter.includes_jira_issue(jira_issue) and not jira_filter.excludes_jira_issue(jira_issue):
+                results.append(jira_issue)
+        return results
+
+    def get_issues_by_view(self, jira_view: JiraView) -> List[JiraIssue]:
+        pass
 
     def owns_issue(self, issue: JiraIssue) -> bool:
         """
@@ -284,6 +326,10 @@ class JiraProject:
 
     def get_issue(self, issue_key: str) -> Optional[JiraIssue]:
         return None if issue_key not in self.jira_issues else self.jira_issues[issue_key]
+
+    # TEST ONLY
+    def add_issue(self, jira_issue: JiraIssue) -> None:
+        self.jira_issues[jira_issue.issue_key] = jira_issue
 
     def translate_custom_field(self, field_name: str) -> str:
         """
