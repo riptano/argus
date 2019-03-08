@@ -71,7 +71,7 @@ class MainMenu:
             MenuOption('u', 'Run an org-based Report', self._run_org_report, pause=False),
             MenuOption('e', 'View Escalations', self.jira_manager.display_escalations, pause=False),
             MenuOption.print_blank_line(),
-            MenuOption('r', 'Generate a Pre-Determined Report', self.go_to_reports_menu, pause=False),
+            MenuOption('r', 'Generate a report from a template', self.go_to_reports_menu, pause=False),
             MenuOption('m', 'Team Management', self.go_to_teams_menu, pause=False),
             MenuOption('c', 'Jira Connections', self.go_to_jira_connections_menu, pause=False),
             MenuOption.print_blank_line(),
@@ -108,6 +108,7 @@ class MainMenu:
 
         self.reports_menu = [
             MenuOption('f', 'FixVersion report (release). Query all tickets with a specified FixVersion', self.jira_manager.report_fix_version),
+            MenuOption('u', 'Generate a current workload report for a single user', self.jira_manager.add_single_user_report),
             MenuOption('s', 'Add a single-user multi-JIRA open ticket dashboard', self._add_multi_jira_dashboard),
             MenuOption('l', 'Add a label-based cross-cutting view', self.jira_manager.add_label_view),
             MenuOption.print_blank_line(),

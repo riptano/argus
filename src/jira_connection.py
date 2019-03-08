@@ -24,12 +24,13 @@ from jira.client import JIRAError, JIRA
 from requests.auth import HTTPBasicAuth
 
 from src import utils
+from src.jira_filter import JiraFilter
 from src.jira_issue import JiraIssue
 from src.jira_project import JiraProject
 from src.test_wrapped_jira_connection_stub import TestWrappedJiraConnectionStub
 from src.utils import (ConfigError, clear, decode, encode,
                        encode_password, get_input, pick_value,
-                       save_argus_config, jira_connection_dir)
+                       save_argus_config, jira_connection_dir, argus_debug)
 
 if TYPE_CHECKING:
     from src.jira_manager import JiraManager
@@ -41,7 +42,7 @@ class JiraConnection:
     Contains metadata for a jira connection and houses the resulting Jira object once connected
     """
 
-    def __init__(self, connection_name='unknown', url='unknown', user_name='unknown', password='unknown') -> None:
+    def __init__(self, connection_name='unknown', url='unknown', user_name='unknown', password='unknown', dummy=False) -> None:
         self.possible_projects = []  # type: List[str]
 
         self.connection_name = connection_name
@@ -59,7 +60,7 @@ class JiraConnection:
 
         # Create the JIRA connection, bailing if we have an error with auth
         try:
-            if utils.unit_test:
+            if utils.unit_test or dummy:
                 self._wrapped_jira_connection = TestWrappedJiraConnectionStub()
             else:
                 self._wrapped_jira_connection = JIRA(server=self._url, basic_auth=(self._user, self._pass))
@@ -77,7 +78,8 @@ class JiraConnection:
         else:
             print('JIRA connection active for {}.'.format(self.connection_name))
 
-        self.save_config()
+        if not dummy:
+            self.save_config()
 
     @classmethod
     def from_file(cls, connection_name: str) -> Optional['JiraConnection']:
@@ -200,7 +202,7 @@ class JiraConnection:
         pick = None
         # Loop to allow trying different substrings
         while pick is None:
-            ss = get_input('Enter portion of name (\'q\' to quit):', lowered=False)
+            ss = get_input('Enter portion of name (case sensitive) (\'q\' to quit):', lowered=False)
             if ss.lower() == 'q':
                 return None
             matches = sorted([x for x in coll if ss in x])
@@ -255,6 +257,15 @@ class JiraConnection:
         if project_name not in self._cached_jira_projects:
             return None
         return self._cached_jira_projects[project_name]
+
+    def get_matching_jira_issues(self, jira_filter: JiraFilter) -> List[JiraIssue]:
+        results = []  # type: List[JiraIssue]
+        for name, jira_project in self._cached_jira_projects.items():
+            pre_len = len(results)
+            results.extend(jira_project.get_filtered_issues(jira_filter))
+            post_len = len(results)
+            argus_debug('Added {} matching jira issues from jira_project: {}'.format(post_len - pre_len, name))
+        return results
 
     @property
     def cached_project_names(self) -> List[str]:

@@ -80,7 +80,7 @@ class JiraDashboard:
 
         matching_issues = []
         for jira_view in list(self._jira_views.values()):
-            matching_issues.extend(list(jira_view.get_issues().values()))
+            matching_issues.extend(list(jira_view.get_matching_issues().values()))
 
         filters = {}  # type: Dict[Column, str]
         while True:

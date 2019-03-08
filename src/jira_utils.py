@@ -19,12 +19,11 @@ from typing import TYPE_CHECKING
 
 from src import utils
 from src.jira_issue import JiraIssue
-from src.utils import browser, ConfigError
+from src.utils import browser, ConfigError, argus_debug, Config
 
 if TYPE_CHECKING:
     from src.jira_connection import JiraConnection
     from src.jira_manager import JiraManager
-    from src.jira_project import JiraProject
 
 
 class JiraUtils:
@@ -103,11 +102,15 @@ class JiraUtils:
         results = []
         total = sys.maxsize
         retrieved = 0
-        while retrieved < total:
+        limit = Config.JiraLimit
+        if limit != 0:
+            print('DEBUG: Jira query limit is: {}'.format(limit))
+        while retrieved < total and (limit == 0 or retrieved <= limit):
             queried = jira_connection.search_issues('PROJECT = {}{}'.format(project_name, update_text), startAt=retrieved, maxResults=100)
             total = queried.total
             print('Querying results in 100 issue increments for project {}. (startAt: {}. total: {})'.format(project_name, retrieved, total))
             retrieved += len(queried)
+
             for issue in queried:
                 try:
                     new_issue = JiraIssue(jira_connection, issue)
@@ -125,13 +128,18 @@ class JiraUtils:
         elif field in issue:
             return issue[field]
         else:
-            # need to translate field based on custom fields for cached JiraProjects inside JiraIssue's JiraConnection
-            for jira_project in jira_manager.get_jira_connection(issue.jira_connection_name).cached_projects:
-                if jira_project.owns_issue(issue):
-                    custom_field = jira_project.translate_custom_field(field)
-                    if custom_field not in issue:
-                        return ''
-                    return issue[jira_project.translate_custom_field(field)]
+            try:
+                jira_connection = jira_manager.get_jira_connection(issue.jira_connection_name)
+                # need to translate field based on custom fields for cached JiraProjects inside JiraIssue's JiraConnection
+                for jira_project in jira_connection.cached_projects:
+                    if jira_project.owns_issue(issue):
+                        custom_field = jira_project.translate_custom_field(field)
+                        if custom_field not in issue:
+                            return ''
+                        return issue[jira_project.translate_custom_field(field)]
+            except ConfigError as e:
+                print('Got a ConfigError. Attempted to pull unknown jira connection? {}'.format(e))
+                return 'error'
         raise AssertionError('Got a JiraIssue with no owning JiraProject. Issue: {}, JiraConnection name: {}'.format(issue, issue.jira_connection_name))
 
     @staticmethod
@@ -182,6 +190,7 @@ class JiraUtils:
     def save_argus_data(items: List[JiraIssue], file_name: str) -> None:
         if utils.unit_test:
             file_name = os.path.join('tests', file_name)
+        argus_debug('saving argus data with JiraIssue list len: {} to file: {}'.format(len(items), file_name))
         with open(file_name, 'wb') as cf:
             for item in items:
                 item.serialize(cf)

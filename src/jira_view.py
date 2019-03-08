@@ -7,7 +7,6 @@ from jira import JIRAError
 
 from src import utils
 from src.display_filter import DisplayFilter
-from src.jira_connection import JiraConnection
 from src.jira_filter import JiraFilter
 from src.jira_issue import JiraIssue
 from src.jira_utils import JiraUtils
@@ -16,6 +15,7 @@ from src.utils import (ConfigError, argus_debug, get_input, pick_value,
                        print_separator, save_argus_config, jira_view_dir, pause)
 
 if TYPE_CHECKING:
+    from src.jira_connection import JiraConnection
     from src.jira_manager import JiraManager
     from src.team import Team
 
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 class JiraView:
 
     """
-    Uses locally cached JiraConnection to determine offline cached JiraProjects to search through for matching JiraIssues
+    A combination of multiple JiraFilters. A ticket matching *ANY* of the JiraFilters will show up in the resultset.
     """
     # pre-populated filters
     PRE_FILTERS = sorted(['assignee', 'reviewer', 'reviewer2', 'component', 'fixVersion', 'target Release',
@@ -37,7 +37,7 @@ class JiraView:
                               'Not Planned', 'Unresolved', 'Won\'t Do', 'Won\'t Fix'])
     }
 
-    def __init__(self, name: str, jira_connection: JiraConnection) -> None:
+    def __init__(self, name: str, jira_connection: 'JiraConnection') -> None:
         self.name = name
         self.jira_connection = jira_connection
 
@@ -70,7 +70,7 @@ class JiraView:
     def add_raw_filter(self, jira_filter: JiraFilter) -> None:
         self._jira_filters[jira_filter.field_name] = jira_filter
 
-    def owned_by(self, jira_connection: JiraConnection) -> bool:
+    def owned_by(self, jira_connection: 'JiraConnection') -> bool:
         return jira_connection == self.jira_connection
 
     @classmethod
@@ -126,7 +126,7 @@ class JiraView:
     def display_view(self, jira_manager: 'JiraManager') -> None:
         df = DisplayFilter.default()
 
-        working_issues = list(self.get_issues().values())
+        working_issues = list(self.get_matching_issues().values())
         while True:
             try:
                 issues = df.display_and_return_sorted_issues(jira_manager, working_issues)
@@ -144,11 +144,11 @@ class JiraView:
                     string = get_input('substring to match:', lowered=False)
                     new_issues = []
                     for jira_issue in working_issues:
-                        if jira_issue.matches(self.jira_connection, string):
+                        if jira_issue.matches(string):
                             new_issues.append(jira_issue)
                     working_issues = new_issues
                 elif custom == 'c':
-                    working_issues = list(self.get_issues().values())
+                    working_issues = list(self.get_matching_issues().values())
                 elif len(issues) == 0:
                     print('No matching jira issues found. Skipping attempt to open.')
                     pause()
@@ -275,7 +275,7 @@ class JiraView:
     def is_empty(self) -> bool:
         return len(self._jira_filters) == 0
 
-    def get_issues(self, string_matches: List[str] = None) -> Dict[str, JiraIssue]:
+    def get_matching_issues(self, string_matches: List[str] = None) -> Dict[str, JiraIssue]:
         """
         Applies nested JiraFilters to all associated cached JiraProjects for the contained JiraConnection
         :param string_matches: substring(s) to match against JiraIssue fields for further refining of a search
@@ -287,77 +287,52 @@ class JiraView:
 
         source_issues = self.jira_connection.cached_jira_issues
 
+        if len(self._jira_filters) == 0:
+            return {}
+
         matching_issues = {}
         excluded_count = 0
 
         for issue_list in source_issues:
             for jira_issue in issue_list:
-                matched = False
-
-                has_or = False
-                matched_or = False
+                matched_all = True
 
                 if utils.debug:
                     print_separator(30)
                     argus_debug('Matching against JiraIssue with key: {key}, assignee: {assignee}, rev: {rev}, rev2: {rev2}, res: {res}'.format(
                         key=jira_issue.issue_key,
-                        assignee=jira_issue['assignee'],
-                        rev=jira_issue.get_value(self.jira_connection, 'reviewer'),
-                        rev2=jira_issue.get_value(self.jira_connection, 'reviewer2'),
-                        res=jira_issue.get_value(self.jira_connection, 'resolution')
+                        assignee=jira_issue.assignee,
+                        rev=jira_issue.reviewer(self.jira_connection),
+                        rev2=jira_issue.reviewer2(self.jira_connection),
+                        res=jira_issue.resolution
                     ))
+                    argus_debug('Len of jira_filters: {}'.format(len(self._jira_filters)))
                     for jira_filter in list(self._jira_filters.values()):
                         argus_debug('Processing filter: {}'.format(jira_filter))
 
-                excluded = False
                 argus_debug('Checking jira_filter match for issue: {}'.format(jira_issue.issue_key))
                 for jira_filter in list(self._jira_filters.values()):
                     argus_debug('Processing filter: {}'.format(jira_filter))
-                    # if we have an OR filter in the JiraFilter, we need to match at least one to be valid
-                    if jira_filter.query_type() == 'OR':
-                        has_or = True
 
-                    if not jira_issue.matches_any(self.jira_connection, string_matches):
+                    # We initially check the strings for match if any are provided
+                    if len(string_matches) != 0 and not jira_issue.matches_any(string_matches):
                         argus_debug('   Skipping {}. Didn\'t match regexes: {}'.format(
                             jira_filter.extract_value(jira_issue), ','.join(string_matches)))
                         excluded_count += 1
                         break
 
-                    if jira_filter.includes_jira_issue(jira_issue):
-                        argus_debug('   Matched: {} with value: {}'.format(
-                            jira_filter, jira_filter.extract_value(jira_issue)))
-                        matched = True
-                        if jira_filter.query_type() == 'OR':
-                            matched_or = True
-                    elif jira_filter.excludes_jira_issue(jira_issue):
-                        argus_debug('   Excluded by: {} with value: {}'.format(
-                            jira_filter, jira_filter.extract_value(jira_issue)))
-                        matched = True
-                        excluded = True
-                        break
-                    # Didn't match and is required, we exclude this JiraIssue
-                    elif jira_filter.query_type() == 'AND':
-                        argus_debug('   Didn\'t match: {} with value: {} and was AND. Excluding.'.format(
-                            jira_filter, jira_filter.extract_value(jira_issue)))
-                        excluded = True
-                    # Didn't match and was OR, don't flag anything
-                    else:
-                        argus_debug('   Didn\'t match: {} with value and was OR. Doing nothing: {}'.format(
-                            jira_filter, jira_filter.extract_value(jira_issue)))
+                    if not jira_filter.matches_jira_issue(jira_issue):
+                        argus_debug('   Did not match: {} with value: {}'.format(jira_filter, jira_filter.extract_value(jira_issue)))
+                        matched_all = False
 
-                    # Cannot short-circuit on match since exclusion beats inclusion and we have to keep checking, but can
-                    # on exclusion bool
-                    if excluded:
+                    if not matched_all:
                         excluded_count += 1
                         break
 
-                argus_debug('      key: {} matched: {}. excluded: {}'.format(jira_issue.issue_key, matched, excluded))
+                argus_debug('      key: {} matched_all: {}'.format(jira_issue.issue_key, matched_all))
 
-                if not excluded:
-                    if has_or and not matched_or:
-                        argus_debug('   has_or on filter, did not match on or field. Excluding.')
-                    elif matched:
-                        matching_issues[jira_issue.issue_key] = jira_issue
+                if matched_all:
+                    matching_issues[jira_issue.issue_key] = jira_issue
 
         print('Returning total of {} JiraIssues matching JiraView {}. Excluded count: {}'.format(
             len(list(matching_issues.keys())),

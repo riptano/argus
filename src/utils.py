@@ -96,6 +96,8 @@ def clear() -> None:
 
 
 def encode_password() -> str:
+    if unit_test:
+        return 'unit_test'
     return Config.MenuPass
 
 
@@ -299,6 +301,7 @@ class Config:
     MenuPass = ''
     SkipUpdate = False
     Experiment = False
+    JiraLimit = 0
 
     @classmethod
     def init_argus(cls) -> None:
@@ -393,7 +396,11 @@ def is_empty(value: Optional[str]) -> bool:
 
 
 def print_separator(count: int, char: str = '-') -> None:
-    print(char * count + os.linesep)
+    print(build_separator(count, char) + os.linesep)
+
+
+def build_separator(count: int, char: str = '-') -> str:
+    return char * count
 
 
 def argus_debug(value: str) -> None:
